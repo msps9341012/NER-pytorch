@@ -25,6 +25,8 @@ cd NER-pytorch
    - [ ] Add masking function
 
 ## Performance
+F1 score on CoNLL-2003 English task.
+
 | Method        | Paper | Our |
 |---------------|-------|-----|
 | BiLSTM-CRF    | 91.22 |     |

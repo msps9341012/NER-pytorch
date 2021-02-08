@@ -6,6 +6,7 @@
 !unzip glove.6B.zip
 ```
 + Train and evaluate.
+   + It supports CNN and Bi-LSTM for the character level.
    + The below example use the parameters settings from [Robust Multilingual Part-of-Speech Tagging via Adversarial Training](https://www.aclweb.org/anthology/N18-1089.pdf)
 ```
 cd NER-pytorch
@@ -18,10 +19,11 @@ cd NER-pytorch
 
 ## To Do
 + Paper 1
+   - [ ] Layer Normalization
    - [ ] Implement gradient estimation
 
 + Paper 2
-   - [ ] Combine ELMO embedding
+   - [ ] Combine ELMo embeddings
    - [ ] Add masking function
 
 ## Performance

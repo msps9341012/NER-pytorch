@@ -18,11 +18,11 @@ cd NER-pytorch
 
 ## To Do
 + Paper 1
-- [ ] Implement gradient estimation
+   - [ ] Implement gradient estimation
 
 + Paper 2
-- [ ] Merge ELMO embedding
-- [ ] Add masking function
+   - [ ] Merge ELMO embedding
+   - [ ] Add masking function
 
 ## Performance
 | Method        | Paper | Our |

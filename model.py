@@ -115,7 +115,7 @@ class BiLSTM_CRF(nn.Module):
 
         return score
 
-    def _get_lstm_features(self, sentence, chars2, caps, chars2_length, d):
+    def _get_lstm_features(self, sentence, chars2, caps, chars2_length, matching_char):
 
         if self.char_mode == 'LSTM':
             # self.char_lstm_hidden = self.init_lstm_hidden(dim=self.char_lstm_dim, bidirection=True, batchsize=chars2.size(0))
@@ -131,7 +131,7 @@ class BiLSTM_CRF(nn.Module):
                 chars_embeds_temp[i] = torch.cat((outputs[i, index-1, :self.char_lstm_dim], outputs[i, 0, self.char_lstm_dim:]))
             chars_embeds = chars_embeds_temp.clone()
             for i in range(chars_embeds.size(0)):
-                chars_embeds[d[i]] = chars_embeds_temp[i]
+                chars_embeds[matching_char[i]] = chars_embeds_temp[i]
 
         if self.char_mode == 'CNN':
             chars_embeds = self.char_embeds(chars2).unsqueeze(1)
@@ -215,10 +215,10 @@ class BiLSTM_CRF(nn.Module):
         best_path.reverse()
         return path_score, best_path
 
-    def neg_log_likelihood(self, sentence, tags, chars2, caps, chars2_length, d):
+    def neg_log_likelihood(self, sentence, tags, chars2, caps, chars2_length, matching_char):
         # sentence, tags is a list of ints
         # features is a 2D tensor, len(sentence) * self.tagset_size
-        feats = self._get_lstm_features(sentence, chars2, caps, chars2_length, d)
+        feats = self._get_lstm_features(sentence, chars2, caps, chars2_length, matching_char)
 
         if self.use_crf:
             forward_score = self._forward_alg(feats)
@@ -230,8 +230,8 @@ class BiLSTM_CRF(nn.Module):
             return scores
 
 
-    def forward(self, sentence, chars, caps, chars2_length, d):
-        feats = self._get_lstm_features(sentence, chars, caps, chars2_length, d)
+    def forward(self, sentence, chars, caps, chars2_length, matching_char):
+        feats = self._get_lstm_features(sentence, chars, caps, chars2_length, matching_char)
         # viterbi to get tag_seq
         if self.use_crf:
             score, tag_seq = self.viterbi_decode(feats)

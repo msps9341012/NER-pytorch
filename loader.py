@@ -312,18 +312,3 @@ def random_batch(batch_size, train_data, singletons=[]):
     #     target_var = target_var.cuda()
 
     return input_padded, input_lengths, target_padded, target_lengths, chars2_seqs_padded, chars2_seqs_lengths
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

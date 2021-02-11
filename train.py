@@ -126,13 +126,11 @@ optparser.add_option(
 )
 
 optparser.add_option(
-    "--norm", default='False',
-    type='bool', help='normalize input embeddings or not'
+    "--norm", action='store_true', help='normalize input embeddings or not'
 )
 
 optparser.add_option(
-    "--adv", default='False',
-    type='bool', help='use adversarial training or not'
+    "--adv", action='store_true',help='use adversarial training or not'
 )
 
 opts = optparser.parse_args()[0]

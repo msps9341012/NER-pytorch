@@ -29,12 +29,15 @@ def log_sum_exp(vec):
     return max_score + \
         torch.log(torch.sum(torch.exp(vec - max_score_broadcast)))
 
+def norm_input(x,dim):
+    return (x-x.mean(dim,True))/x.std(dim).unsqueeze(dim)
+
 
 class BiLSTM_CRF(nn.Module):
 
     def __init__(self, vocab_size, tag_to_ix, embedding_dim, hidden_dim, char_lstm_dim=25,
                  char_to_ix=None, pre_word_embeds=None, char_embedding_dim=25, use_gpu=False,
-                 n_cap=None, cap_embedding_dim=None, use_crf=True, char_mode='CNN'):
+                 n_cap=None, cap_embedding_dim=None, use_crf=True, char_mode='CNN',norm=False,alpha=0):
         super(BiLSTM_CRF, self).__init__()
         self.use_gpu = use_gpu
         self.embedding_dim = embedding_dim
@@ -47,6 +50,8 @@ class BiLSTM_CRF(nn.Module):
         self.tagset_size = len(tag_to_ix)
         self.out_channels = char_lstm_dim
         self.char_mode = char_mode
+        self.norm=norm
+        self.alpha=alpha
 
         print('char_mode: %s, out_channels: %d, hidden_dim: %d, ' % (char_mode, char_lstm_dim, hidden_dim))
 
@@ -115,11 +120,26 @@ class BiLSTM_CRF(nn.Module):
 
         return score
 
-    def _get_lstm_features(self, sentence, chars2, caps, chars2_length, matching_char):
+    def _get_lstm_features(self, sentence, chars2, caps, chars2_length, matching_char,adv=False,grads=None):
+
+        word_grads=[]
+        char_grads=[]
+        if adv:
+          char_grads=grads[0]
+          char_grads=char_grads/torch.norm(char_grads,dim=2).unsqueeze(2)
+          
+          word_grads=grad[1]
+          word_grads=word_grads/torch.norm(word_grads,dim=1).unsqueeze(1)
+
+        chars_embeds = self.char_embeds(chars2)
+        if self.norm:
+          chars_embeds=norm_input(chars_embeds,2)
+
 
         if self.char_mode == 'LSTM':
             # self.char_lstm_hidden = self.init_lstm_hidden(dim=self.char_lstm_dim, bidirection=True, batchsize=chars2.size(0))
-            chars_embeds = self.char_embeds(chars2).transpose(0, 1)
+            #chars_embeds = self.char_embeds(chars2).transpose(0, 1)
+            chars_embeds=chars_embeds.transpose(0, 1)
             packed = torch.nn.utils.rnn.pack_padded_sequence(chars_embeds, chars2_length)
             lstm_out, _ = self.char_lstm(packed)
             outputs, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(lstm_out)
@@ -130,6 +150,8 @@ class BiLSTM_CRF(nn.Module):
             for i, index in enumerate(output_lengths):
                 chars_embeds_temp[i] = torch.cat((outputs[i, index-1, :self.char_lstm_dim], outputs[i, 0, self.char_lstm_dim:]))
             chars_embeds = chars_embeds_temp.clone()
+            if adv:
+              chars_embeds=chars_embeds+self.alpha*chars_embeds*(chars_embeds.shape[-1])**0.5
             for i in range(chars_embeds.size(0)):
                 chars_embeds[matching_char[i]] = chars_embeds_temp[i]
 
@@ -145,6 +167,12 @@ class BiLSTM_CRF(nn.Module):
         # chars_embeds = g * h + (1 - g) * chars_embeds
 
         embeds = self.word_embeds(sentence)
+        if self.norm:
+            embeds=norm_input(embeds,1)
+        if adv:
+            embeds=embeds+self.alpha*word_grads*(self.embedding_dim)**0.5
+
+        
         if self.n_cap and self.cap_embedding_dim:
             cap_embedding = self.cap_embeds(caps)
 
@@ -215,10 +243,10 @@ class BiLSTM_CRF(nn.Module):
         best_path.reverse()
         return path_score, best_path
 
-    def neg_log_likelihood(self, sentence, tags, chars2, caps, chars2_length, matching_char):
+    def neg_log_likelihood(self, sentence, tags, chars2, caps, chars2_length, matching_char,adv=False,grads=None):
         # sentence, tags is a list of ints
         # features is a 2D tensor, len(sentence) * self.tagset_size
-        feats = self._get_lstm_features(sentence, chars2, caps, chars2_length, matching_char)
+        feats = self._get_lstm_features(sentence, chars2, caps, chars2_length, matching_char,adv=False,grads=None)
 
         if self.use_crf:
             forward_score = self._forward_alg(feats)

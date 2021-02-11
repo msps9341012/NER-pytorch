@@ -120,6 +120,21 @@ optparser.add_option(
     type='int', help='training epochs'
 )
 
+optparser.add_option(
+    "--alpha", default='0.0',
+    type='float', help='alpha'
+)
+
+optparser.add_option(
+    "--norm", default='False',
+    type='bool', help='normalize input embeddings or not'
+)
+
+optparser.add_option(
+    "--adv", default='False',
+    type='bool', help='use adversarial training or not'
+)
+
 opts = optparser.parse_args()[0]
 
 parameters = OrderedDict()
@@ -141,6 +156,12 @@ parameters['reload'] = opts.reload == 1
 parameters['name'] = opts.name
 parameters['char_mode'] = opts.char_mode
 parameters['epochs']=opts.epochs
+
+parameters['norm']=opts.norm
+parameters['adv']=opts.adv
+parameters['alpha']=opts.alpha
+
+
 
 parameters['use_gpu'] = opts.use_gpu == 1 and torch.cuda.is_available()
 use_gpu = parameters['use_gpu']
@@ -245,17 +266,20 @@ model = BiLSTM_CRF(vocab_size=len(word_to_id),
                    use_crf=parameters['crf'],
                    char_mode=parameters['char_mode'],
                    char_embedding_dim=parameters['char_dim'],
-                   char_lstm_dim=parameters['char_lstm_dim'])
+                   char_lstm_dim=parameters['char_lstm_dim'],
+                   norm=parameters['norm'],
+                   alpha=parameters['alpha'])
                    # n_cap=4,
                    # cap_embedding_dim=10)
 if parameters['reload']:
     model.load_state_dict(torch.load(model_name))
 if use_gpu:
     model.cuda()
+
 learning_rate = 0.015
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
 losses = []
-loss = 0.0
+#loss = 0.0
 best_dev_F = -1.0
 best_test_F = -1.0
 best_train_F = -1.0
@@ -346,13 +370,34 @@ def evaluating(model, datas, best_F,display_confusion_matrix = False):
             ))
     return best_F, new_F, save
 
+def extract_grad_hook(module, grad_in, grad_out):
+    if module.weight.shape[0]==len(char_to_id): #char_level
+        extracted_grads_char.append(grad_out[0])
+    if module.weight.shape[0]==word_embeds.shape[0]: #word_level
+        extracted_grads_word.append(grad_out[0])
 
+
+# add hooks for embeddings, only add a hook to encoder wordpiece embeddings (not position)
+def add_hooks(model):
+    hook_registered = False
+    for module in model.modules():
+        if isinstance(module, torch.nn.Embedding):
+            module.weight.requires_grad = True
+            module.register_backward_hook(extract_grad_hook)
+            hook_registered = True
+    if not hook_registered:
+        exit("Embedding matrix not found")
 
 model.train(True)
 for epoch in range(parameters['epochs']):
+    in_epoch_losses = []
     for i, index in enumerate(np.random.permutation(len(train_data))):
         tr = time.time()
         count += 1
+
+        extracted_grads_char = []
+        extracted_grads_word = []
+
         data = train_data[index]
         model.zero_grad()
 
@@ -390,14 +435,44 @@ for epoch in range(parameters['epochs']):
 
         targets = torch.LongTensor(tags)
         caps = Variable(torch.LongTensor(data['caps']))
+
         if use_gpu:
-            neg_log_likelihood = model.neg_log_likelihood(sentence_in.cuda(), targets.cuda(), chars2_mask.cuda(), caps.cuda(), chars2_length, d)
-        else:
-            neg_log_likelihood = model.neg_log_likelihood(sentence_in, targets, chars2_mask, caps, chars2_length, d)
-        
+            sentence_in = sentence_in.cuda()
+            targets     = targets.cuda()
+            chars2_mask = chars2_mask.cuda()
+            caps        = caps.cuda()
+
+        neg_log_likelihood = model.neg_log_likelihood(sentence = sentence_in, 
+                                                      tags = targets, 
+                                                      chars2 = chars2_mask, 
+                                                      caps = caps, 
+                                                      chars2_length = chars2_length, 
+                                                      matching_char = d)
+
         loss = float(neg_log_likelihood.cpu().detach().numpy()) / len(data['words'])
-        losses.append(loss)
+        neg_log_likelihood=neg_log_likelihood*0.5
         neg_log_likelihood.backward()
+
+
+        if adv:
+            neg_log_likelihood_adv = model.neg_log_likelihood(sentence = sentence_in, 
+                                                          tags = targets, 
+                                                          chars2 = chars2_mask, 
+                                                          caps = caps, 
+                                                          chars2_length = chars2_length, 
+                                                          matching_char = d,
+                                                          adv=True,
+                                                          grads=[extracted_grads_char[0]*2,extracted_grads_word[0]*2])
+
+
+            neg_log_likelihood_adv=neg_log_likelihood_adv*0.5
+            neg_log_likelihood_adv.backward()
+            loss = loss+float(neg_log_likelihood_adv.cpu().detach().numpy()) / len(data['words'])
+            neg_log_likelihood_adv.backward()
+
+
+        in_epoch_losses.append(loss)
+            
         torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
         optimizer.step()
 
@@ -434,7 +509,10 @@ for epoch in range(parameters['epochs']):
 
         # if count % len(train_data) == 0:
         #     adjust_learning_rate(optimizer, lr=learning_rate/(1+0.05*count/len(train_data)))
+    
+    losses.append(np.mean(in_epoch_losses))
     model.train(False)
+
 
     best_train_F, new_train_F, _ = evaluating(model, test_train_data, best_train_F)
     best_dev_F, new_dev_F, save = evaluating(model, dev_data, best_dev_F)

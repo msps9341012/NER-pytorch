@@ -388,6 +388,9 @@ def add_hooks(model):
     if not hook_registered:
         exit("Embedding matrix not found")
 
+add_hooks(model)
+
+
 model.train(True)
 for epoch in range(parameters['epochs']):
     in_epoch_losses = []
@@ -454,7 +457,7 @@ for epoch in range(parameters['epochs']):
         neg_log_likelihood.backward()
 
 
-        if adv:
+        if parameters['adv']:
             neg_log_likelihood_adv = model.neg_log_likelihood(sentence = sentence_in, 
                                                           tags = targets, 
                                                           chars2 = chars2_mask, 
@@ -468,7 +471,6 @@ for epoch in range(parameters['epochs']):
             neg_log_likelihood_adv=neg_log_likelihood_adv*0.5
             neg_log_likelihood_adv.backward()
             loss = loss+float(neg_log_likelihood_adv.cpu().detach().numpy()) / len(data['words'])
-            neg_log_likelihood_adv.backward()
 
 
         in_epoch_losses.append(loss)

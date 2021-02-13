@@ -97,6 +97,7 @@ optparser.add_option(
 optparser.add_option(
     "-r", "--reload", default="0",
     type='int', help="Reload the last saved model"
+    
 )
 optparser.add_option(
     "-g", '--use_gpu', default='1',

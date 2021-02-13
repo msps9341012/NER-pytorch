@@ -151,7 +151,7 @@ class BiLSTM_CRF(nn.Module):
                 chars_embeds_temp[i] = torch.cat((outputs[i, index-1, :self.char_lstm_dim], outputs[i, 0, self.char_lstm_dim:]))
             chars_embeds = chars_embeds_temp.clone()
             if adv:
-              chars_embeds=chars_embeds+self.alpha*chars_embeds*(chars_embeds.shape[-1])**0.5
+              chars_embeds=chars_embeds+self.alpha*char_grads*(sum(chars2_length)*chars_embeds.shape[-1])**0.5
             for i in range(chars_embeds.size(0)):
                 chars_embeds[matching_char[i]] = chars_embeds_temp[i]
 
@@ -170,7 +170,7 @@ class BiLSTM_CRF(nn.Module):
         if self.norm:
             embeds=norm_input(embeds,1)
         if adv:
-            embeds=embeds+self.alpha*word_grads*(self.embedding_dim)**0.5
+            embeds=embeds+self.alpha*word_grads*(len(chars2_length)*self.embedding_dim)**0.5
 
         
         if self.n_cap and self.cap_embedding_dim:

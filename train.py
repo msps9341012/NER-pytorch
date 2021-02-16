@@ -209,8 +209,21 @@ dico_words, word_to_id, id_to_word = augment_with_pretrained(
         ) if not parameters['all_emb'] else None
     )
 
+word_sorted_items = sorted(dico_words.items(), key=lambda x: (-x[1], x[0]))
+word_freq=list(map(lambda x: x[1],word_sorted_items))
+word_freq[0]=0
+word_freq[1]=0
+word_freq=np.array(word_freq)/sum(word_freq)
+
+
 dico_chars, char_to_id, id_to_char = char_mapping(train_sentences)
 dico_tags, tag_to_id, id_to_tag = tag_mapping(train_sentences)
+
+char_sorted_items=sorted(dico_chars.items(), key=lambda x: (-x[1], x[0]))
+char_freq=list(map(lambda x: x[1],char_sorted_items))
+char_freq[0]=0
+char_freq=np.array(char_freq)/sum(char_freq)
+
 
 train_data = prepare_dataset(
     train_sentences, word_to_id, char_to_id, tag_to_id, lower
@@ -266,7 +279,6 @@ model = BiLSTM_CRF(vocab_size=len(word_to_id),
                    char_mode=parameters['char_mode'],
                    char_embedding_dim=parameters['char_dim'],
                    char_lstm_dim=parameters['char_lstm_dim'],
-                   norm=parameters['norm'],
                    alpha=parameters['alpha'])
                    # n_cap=4,
                    # cap_embedding_dim=10)
@@ -290,6 +302,8 @@ count = 0
 best_idx=0
 
 #vis = visdom.Visdom()
+
+
 
 sys.stdout.flush()
 
@@ -354,7 +368,7 @@ def evaluating(model, datas, best_F,display_confusion_matrix = False):
     if new_F > best_F:
         best_F = new_F
         save = True
-        print('the best F is ', new_F)
+        #print('the best F is ', new_F)
 
     if display_confusion_matrix:
         print(("{: >2}{: >7}{: >7}%s{: >9}" % ("{: >7}" * confusion_matrix.size(0))).format(
@@ -389,6 +403,18 @@ def add_hooks(model):
 
 add_hooks(model)
 
+word_freq_scale=torch.tensor(word_freq, requires_grad=False).float().unsqueeze(1).cuda()
+char_freq_scale=torch.tensor(char_freq, requires_grad=False).float().unsqueeze(1).cuda()
+
+def normalize(freq_scale,emb):
+    mean = (freq_scale * emb).sum(axis=0, keepdims=True) 
+    var=(freq_scale * (emb - mean)**2.).sum(axis=0, keepdims=True)
+    stddev = torch.sqrt(1e-6 + var)
+    return (emb - mean) / stddev
+
+if parameters['norm']:
+    model.char_embeds.weight.data=normalize(char_freq_scale,model.char_embeds.weight.data)
+    model.word_embeds.weight.data=normalize(word_freq_scale,model.word_embeds.weight.data)
 
 model.train(True)
 for epoch in range(parameters['epochs']):
@@ -477,6 +503,10 @@ for epoch in range(parameters['epochs']):
         torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
         optimizer.step()
 
+        if parameters['norm']: 
+            model.char_embeds.weight.data=normalize(char_freq_scale,model.char_embeds.weight.data)
+            model.word_embeds.weight.data=normalize(word_freq_scale,model.word_embeds.weight.data)
+
         # if count % plot_every == 0:
         #     loss /= plot_every
         #     print(count, ': ', loss)
@@ -515,15 +545,18 @@ for epoch in range(parameters['epochs']):
     model.train(False)
 
 
-    best_train_F, new_train_F, _ = evaluating(model, test_train_data, best_train_F)
+    #best_train_F, new_train_F, _ = evaluating(model, test_train_data, best_train_F)
     best_dev_F, new_dev_F, save = evaluating(model, dev_data, best_dev_F)
     if save:
         best_idx=epoch
         torch.save(model, model_name)
     best_test_F, new_test_F, _ = evaluating(model, test_data, best_test_F)
-    all_F.append([new_train_F, new_dev_F, new_test_F])
+
+    all_F.append([0.0, new_dev_F, new_test_F])
+
     sys.stdout.flush()
-    print('F train/valid/test : %.2f / %.2f / %.2f - %d'%(best_train_F, best_dev_F, best_test_F, best_idx))
+
+    print('Epoch %d : valid/test/test_best : %.2f / %.2f / %.2f - %d'%(epoch, best_dev_F, new_test_F,best_test_F, best_idx))
     model.train(True)
     adjust_learning_rate(optimizer, lr=learning_rate/(1+0.05*count/len(train_data)))
 

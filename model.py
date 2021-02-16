@@ -37,7 +37,7 @@ class BiLSTM_CRF(nn.Module):
 
     def __init__(self, vocab_size, tag_to_ix, embedding_dim, hidden_dim, char_lstm_dim=25,
                  char_to_ix=None, pre_word_embeds=None, char_embedding_dim=25, use_gpu=False,
-                 n_cap=None, cap_embedding_dim=None, use_crf=True, char_mode='CNN',norm=False,alpha=0):
+                 n_cap=None, cap_embedding_dim=None, use_crf=True, char_mode='CNN',alpha=0):
         super(BiLSTM_CRF, self).__init__()
         self.use_gpu = use_gpu
         self.embedding_dim = embedding_dim
@@ -50,7 +50,6 @@ class BiLSTM_CRF(nn.Module):
         self.tagset_size = len(tag_to_ix)
         self.out_channels = char_lstm_dim
         self.char_mode = char_mode
-        self.norm=norm
         self.alpha=alpha
 
         print('char_mode: %s, out_channels: %d, hidden_dim: %d, ' % (char_mode, char_lstm_dim, hidden_dim))
@@ -132,8 +131,6 @@ class BiLSTM_CRF(nn.Module):
           word_grads=word_grads/torch.norm(word_grads,dim=1).unsqueeze(1)
 
         chars_embeds = self.char_embeds(chars2)
-        if self.norm:
-          chars_embeds=norm_input(chars_embeds,2)
 
 
         if self.char_mode == 'LSTM':
@@ -167,8 +164,7 @@ class BiLSTM_CRF(nn.Module):
         # chars_embeds = g * h + (1 - g) * chars_embeds
 
         embeds = self.word_embeds(sentence)
-        if self.norm:
-            embeds=norm_input(embeds,1)
+        
         if adv:
             embeds=embeds+self.alpha*word_grads*(len(chars2_length)*self.embedding_dim)**0.5
 

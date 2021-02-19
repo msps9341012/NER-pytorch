@@ -567,10 +567,11 @@ print(time.time() - t)
 
 #plt.plot(losses)
 #plt.show()
-
+'''
 max_temp=max_idx=0
 for i in range(len(all_F)):
     if all_F[i][2] > max_temp:
         max_temp = all_F[i][2]
         max_idx = i
 print(max_idx, max_temp)
+'''

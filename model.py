@@ -134,9 +134,9 @@ class BiLSTM_CRF(nn.Module):
         if adv:
             print('adv')
             char_grads=grads[0]
-            char_grads=char_grads/torch.norm(char_grads,dim=2).unsqueeze(2)
+            char_grads=char_grads/(torch.norm(char_grads,dim=2).unsqueeze(2)+1e-8)
             word_grads=grads[1]
-            word_grads=word_grads/torch.norm(word_grads,dim=1).unsqueeze(1)
+            word_grads=word_grads/(torch.norm(word_grads,dim=1).unsqueeze(1)+1e-8)
 
         chars_embeds = self.char_embeds(chars2)
         if adv:
@@ -159,8 +159,6 @@ class BiLSTM_CRF(nn.Module):
             for i, index in enumerate(output_lengths):
                 chars_embeds_temp[i] = torch.cat((outputs[i, index-1, :self.char_lstm_dim], outputs[i, 0, self.char_lstm_dim:]))
             chars_embeds = chars_embeds_temp.clone()
-            if adv:
-              chars_embeds=chars_embeds+self.alpha*char_grads*(sum(chars2_length)*chars_embeds.shape[-1])**0.5
             for i in range(chars_embeds.size(0)):
                 chars_embeds[matching_char[i]] = chars_embeds_temp[i]
 

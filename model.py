@@ -132,7 +132,6 @@ class BiLSTM_CRF(nn.Module):
         word_grads=[]
         char_grads=[]
         if adv:
-            print('adv')
             char_grads=grads[0]
             char_grads=char_grads/(torch.norm(char_grads,dim=2).unsqueeze(2)+1e-8)
             word_grads=grads[1]

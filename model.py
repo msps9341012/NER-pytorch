@@ -28,9 +28,14 @@ def log_sum_exp(vec):
     max_score_broadcast = max_score.view(1, -1).expand(1, vec.size()[1])
     return max_score + \
         torch.log(torch.sum(torch.exp(vec - max_score_broadcast)))
-
+'''
 def norm_input(x,dim):
     return (x-x.mean(dim,True))/x.std(dim).unsqueeze(dim)
+'''
+
+def _normalize(x):
+    return (x-x.mean()/x.std())
+
 
 
 class BiLSTM_CRF(nn.Module):
@@ -62,6 +67,7 @@ class BiLSTM_CRF(nn.Module):
             self.char_lstm_dim = char_lstm_dim
             self.char_embeds = nn.Embedding(len(char_to_ix), char_embedding_dim)
             init_embedding(self.char_embeds.weight)
+            self.char_embeds.weight.data=_normalize(self.char_embeds.weight.data)
             if self.char_mode == 'LSTM':
                 self.char_lstm = nn.LSTM(char_embedding_dim, char_lstm_dim, num_layers=1, bidirectional=True)
                 init_lstm(self.char_lstm)
@@ -74,6 +80,8 @@ class BiLSTM_CRF(nn.Module):
             self.word_embeds.weight = nn.Parameter(torch.FloatTensor(pre_word_embeds))
         else:
             self.pre_word_embeds = False
+
+        self.word_embeds.weight.data=_normalize(self.word_embeds.weight.data)
 
         self.dropout = nn.Dropout(0.5)
         if self.n_cap and self.cap_embedding_dim:
@@ -124,13 +132,17 @@ class BiLSTM_CRF(nn.Module):
         word_grads=[]
         char_grads=[]
         if adv:
-          char_grads=grads[0]
-          char_grads=char_grads/torch.norm(char_grads,dim=2).unsqueeze(2)
-          
-          word_grads=grad[1]
-          word_grads=word_grads/torch.norm(word_grads,dim=1).unsqueeze(1)
+            print('adv')
+            char_grads=grads[0]
+            char_grads=char_grads/torch.norm(char_grads,dim=2).unsqueeze(2)
+            word_grads=grads[1]
+            word_grads=word_grads/torch.norm(word_grads,dim=1).unsqueeze(1)
 
         chars_embeds = self.char_embeds(chars2)
+        if adv:
+            chars_embeds=chars_embeds+self.alpha*char_grads*(sum(chars2_length)*chars_embeds.shape[-1])**0.5
+
+
 
 
         if self.char_mode == 'LSTM':
@@ -242,7 +254,7 @@ class BiLSTM_CRF(nn.Module):
     def neg_log_likelihood(self, sentence, tags, chars2, caps, chars2_length, matching_char,adv=False,grads=None):
         # sentence, tags is a list of ints
         # features is a 2D tensor, len(sentence) * self.tagset_size
-        feats = self._get_lstm_features(sentence, chars2, caps, chars2_length, matching_char,adv=False,grads=None)
+        feats = self._get_lstm_features(sentence, chars2, caps, chars2_length, matching_char,adv=adv,grads=grads)
 
         if self.use_crf:
             forward_score = self._forward_alg(feats)

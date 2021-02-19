@@ -209,21 +209,22 @@ dico_words, word_to_id, id_to_word = augment_with_pretrained(
         ) if not parameters['all_emb'] else None
     )
 
+'''
 word_sorted_items = sorted(dico_words.items(), key=lambda x: (-x[1], x[0]))
 word_freq=list(map(lambda x: x[1],word_sorted_items))
 word_freq[0]=0
 word_freq[1]=0
 word_freq=np.array(word_freq)/sum(word_freq)
-
+'''
 
 dico_chars, char_to_id, id_to_char = char_mapping(train_sentences)
 dico_tags, tag_to_id, id_to_tag = tag_mapping(train_sentences)
-
+'''
 char_sorted_items=sorted(dico_chars.items(), key=lambda x: (-x[1], x[0]))
 char_freq=list(map(lambda x: x[1],char_sorted_items))
 char_freq[0]=0
 char_freq=np.array(char_freq)/sum(char_freq)
-
+'''
 
 train_data = prepare_dataset(
     train_sentences, word_to_id, char_to_id, tag_to_id, lower
@@ -403,9 +404,9 @@ def add_hooks(model):
 
 add_hooks(model)
 
-word_freq_scale=torch.tensor(word_freq, requires_grad=False).float().unsqueeze(1).cuda()
-char_freq_scale=torch.tensor(char_freq, requires_grad=False).float().unsqueeze(1).cuda()
-
+#word_freq_scale=torch.tensor(word_freq, requires_grad=False).float().unsqueeze(1).cuda()
+#char_freq_scale=torch.tensor(char_freq, requires_grad=False).float().unsqueeze(1).cuda()
+'''
 def normalize(freq_scale,emb):
     mean = (freq_scale * emb).sum(axis=0, keepdims=True) 
     var=(freq_scale * (emb - mean)**2.).sum(axis=0, keepdims=True)
@@ -415,7 +416,7 @@ def normalize(freq_scale,emb):
 if parameters['norm']:
     model.char_embeds.weight.data=normalize(char_freq_scale,model.char_embeds.weight.data)
     model.word_embeds.weight.data=normalize(word_freq_scale,model.word_embeds.weight.data)
-
+'''
 model.train(True)
 for epoch in range(parameters['epochs']):
     in_epoch_losses = []
@@ -502,11 +503,11 @@ for epoch in range(parameters['epochs']):
             
         torch.nn.utils.clip_grad_norm(model.parameters(), 5.0)
         optimizer.step()
-
+        '''
         if parameters['norm']: 
             model.char_embeds.weight.data=normalize(char_freq_scale,model.char_embeds.weight.data)
             model.word_embeds.weight.data=normalize(word_freq_scale,model.word_embeds.weight.data)
-
+        '''
         # if count % plot_every == 0:
         #     loss /= plot_every
         #     print(count, ': ', loss)

@@ -228,18 +228,18 @@ def init_lstm(input_lstm):
     """
     for ind in range(0, input_lstm.num_layers):
         weight = eval('input_lstm.weight_ih_l' + str(ind))
-        bias = np.sqrt(6.0 / (weight.size(0) / 4 + weight.size(1)))
+        bias = np.sqrt(6.0 / (weight.size(0) + weight.size(1)))
         nn.init.uniform_(weight, -bias, bias)
         weight = eval('input_lstm.weight_hh_l' + str(ind))
-        bias = np.sqrt(6.0 / (weight.size(0) / 4 + weight.size(1)))
+        bias = np.sqrt(6.0 / (weight.size(0) + weight.size(1)))
         nn.init.uniform_(weight, -bias, bias)
     if input_lstm.bidirectional:
         for ind in range(0, input_lstm.num_layers):
             weight = eval('input_lstm.weight_ih_l' + str(ind) + '_reverse')
-            bias = np.sqrt(6.0 / (weight.size(0) / 4 + weight.size(1)))
+            bias = np.sqrt(6.0 / (weight.size(0) + weight.size(1)))
             nn.init.uniform_(weight, -bias, bias)
             weight = eval('input_lstm.weight_hh_l' + str(ind) + '_reverse')
-            bias = np.sqrt(6.0 / (weight.size(0) / 4 + weight.size(1)))
+            bias = np.sqrt(6.0 / (weight.size(0) + weight.size(1)))
             nn.init.uniform_(weight, -bias, bias)
 
     if input_lstm.bias:

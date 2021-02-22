@@ -36,6 +36,14 @@ def norm_input(x,dim):
 def _normalize(x):
     return (x-x.mean()/x.std())
 
+def _scale_unit_l2(x):
+    # shape(x) = (batch, num_timesteps, d)
+
+    alpha = torch.amax(torch.abs(x), axis=(1,2), keepdims=True) + 1e-12
+    l2_norm = alpha * torch.sqrt(torch.sum( (x/alpha)**2, axis=(1,2),keepdims=True) + 1e-6)
+    x_unit = x / l2_norm
+    return x_unit
+
 
 
 class BiLSTM_CRF(nn.Module):
@@ -133,9 +141,11 @@ class BiLSTM_CRF(nn.Module):
         char_grads=[]
         if adv:
             char_grads=grads[0]
-            char_grads=char_grads/(torch.norm(char_grads,dim=2).unsqueeze(2)+1e-8)
+            char_grads=_scale_unit_l2(char_grads)
+            #char_grads=char_grads/(torch.norm(char_grads,dim=2).unsqueeze(2)+1e-8)
             word_grads=grads[1]
-            word_grads=word_grads/(torch.norm(word_grads,dim=1).unsqueeze(1)+1e-8)
+            word_grads=_scale_unit_l2(word_grads.unsqueeze(0)).squeeze(0)
+            #word_grads=word_grads/(torch.norm(word_grads,dim=1).unsqueeze(1)+1e-8)
 
         chars_embeds = self.char_embeds(chars2)
         if adv:

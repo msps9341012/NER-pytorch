@@ -402,7 +402,8 @@ def add_hooks(model):
     if not hook_registered:
         exit("Embedding matrix not found")
 
-add_hooks(model)
+if parameters['adv']:
+    add_hooks(model)
 
 #word_freq_scale=torch.tensor(word_freq, requires_grad=False).float().unsqueeze(1).cuda()
 #char_freq_scale=torch.tensor(char_freq, requires_grad=False).float().unsqueeze(1).cuda()
@@ -418,6 +419,10 @@ if parameters['norm']:
     model.word_embeds.weight.data=normalize(word_freq_scale,model.word_embeds.weight.data)
 '''
 model.train(True)
+ratio=1.0
+if parameters['adv']:
+    ratio=0.5
+
 for epoch in range(parameters['epochs']):
     in_epoch_losses = []
     for i, index in enumerate(np.random.permutation(len(train_data))):
@@ -479,7 +484,7 @@ for epoch in range(parameters['epochs']):
                                                       matching_char = d)
 
         loss = float(neg_log_likelihood.cpu().detach().numpy()) / len(data['words'])
-        neg_log_likelihood=neg_log_likelihood*0.5
+        neg_log_likelihood=neg_log_likelihood*ratio
         neg_log_likelihood.backward()
 
 
@@ -494,7 +499,7 @@ for epoch in range(parameters['epochs']):
                                                           grads=[extracted_grads_char[0]*2,extracted_grads_word[0]*2])
 
 
-            neg_log_likelihood_adv=neg_log_likelihood_adv*0.5
+            neg_log_likelihood_adv=neg_log_likelihood_adv*(1-ratio)
             neg_log_likelihood_adv.backward()
             loss = loss+float(neg_log_likelihood_adv.cpu().detach().numpy()) / len(data['words'])
 
@@ -550,7 +555,7 @@ for epoch in range(parameters['epochs']):
     best_dev_F, new_dev_F, save = evaluating(model, dev_data, best_dev_F)
     if save:
         best_idx=epoch
-        torch.save(model, model_name)
+        torch.save(model.state_dict(), model_name)
     best_test_F, new_test_F, _ = evaluating(model, test_data, best_test_F)
 
     all_F.append([0.0, new_dev_F, new_test_F])

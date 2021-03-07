@@ -1,8 +1,8 @@
 # coding=utf-8
 from __future__ import print_function
-import optparse
+#import optparse
 import itertools
-from collections import OrderedDict
+#from collections import OrderedDict
 import loader
 import torch
 import time
@@ -10,159 +10,21 @@ import _pickle as cPickle
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import sys
+import random
+import pickle
 
 #import visdom
 
 from utils import *
 from loader import *
 from model import BiLSTM_CRF
+from arguments import get_args 
+
+
 t = time.time()
+
+opts, parameters=get_args()
 models_path = "models/"
-
-optparser = optparse.OptionParser()
-optparser.add_option(
-    "-T", "--train", default="dataset/eng.train",
-    help="Train set location"
-)
-optparser.add_option(
-    "-d", "--dev", default="dataset/eng.testa",
-    help="Dev set location"
-)
-optparser.add_option(
-    "-t", "--test", default="dataset/eng.testb",
-    help="Test set location"
-)
-optparser.add_option(
-    '--test_train', default='dataset/eng.train54019',
-    help='test train'
-)
-
-
-optparser.add_option(
-    "-s", "--tag_scheme", default="iobes",
-    help="Tagging scheme (IOB or IOBES)"
-)
-optparser.add_option(
-    "-l", "--lower", default="1",
-    type='int', help="Lowercase words (this will not affect character inputs)"
-)
-optparser.add_option(
-    "-z", "--zeros", default="0",
-    type='int', help="Replace digits with 0"
-)
-optparser.add_option(
-    "-c", "--char_dim", default="25",
-    type='int', help="Char embedding dimension"
-)
-optparser.add_option(
-    "-C", "--char_lstm_dim", default="25",
-    type='int', help="Char LSTM hidden layer size"
-)
-optparser.add_option(
-    "-b", "--char_bidirect", default="1",
-    type='int', help="Use a bidirectional LSTM for chars"
-)
-optparser.add_option(
-    "-w", "--word_dim", default="100",
-    type='int', help="Token embedding dimension"
-)
-optparser.add_option(
-    "-W", "--word_lstm_dim", default="200",
-    type='int', help="Token LSTM hidden layer size"
-)
-optparser.add_option(
-    "-B", "--word_bidirect", default="1",
-    type='int', help="Use a bidirectional LSTM for words"
-)
-optparser.add_option(
-    "-p", "--pre_emb", default="models/glove.6B.100d.txt",
-    help="Location of pretrained embeddings"
-)
-optparser.add_option(
-    "-A", "--all_emb", default="1",
-    type='int', help="Load all embeddings"
-)
-optparser.add_option(
-    "-a", "--cap_dim", default="0",
-    type='int', help="Capitalization feature dimension (0 to disable)"
-)
-optparser.add_option(
-    "-f", "--crf", default="1",
-    type='int', help="Use CRF (0 to disable)"
-)
-optparser.add_option(
-    "-D", "--dropout", default="0.5",
-    type='float', help="Droupout on the input (0 = no dropout)"
-)
-optparser.add_option(
-    "-r", "--reload", default="0",
-    type='int', help="Reload the last saved model"
-    
-)
-optparser.add_option(
-    "-g", '--use_gpu', default='1',
-    type='int', help='whether or not to ues gpu'
-)
-optparser.add_option(
-    '--loss', default='loss.txt',
-    help='loss file location'
-)
-optparser.add_option(
-    '--name', default='test',
-    help='model name'
-)
-optparser.add_option(
-    '--char_mode', choices=['CNN', 'LSTM'], default='CNN',
-    help='char_CNN or char_LSTM'
-)
-
-optparser.add_option(
-    "--epochs", default='150',
-    type='int', help='training epochs'
-)
-
-optparser.add_option(
-    "--alpha", default='0.0',
-    type='float', help='alpha'
-)
-
-optparser.add_option(
-    "--norm", action='store_true', help='normalize input embeddings or not'
-)
-
-optparser.add_option(
-    "--adv", action='store_true',help='use adversarial training or not'
-)
-
-opts = optparser.parse_args()[0]
-
-parameters = OrderedDict()
-parameters['tag_scheme'] = opts.tag_scheme
-parameters['lower'] = opts.lower == 1
-parameters['zeros'] = opts.zeros == 1
-parameters['char_dim'] = opts.char_dim
-parameters['char_lstm_dim'] = opts.char_lstm_dim
-parameters['char_bidirect'] = opts.char_bidirect == 1
-parameters['word_dim'] = opts.word_dim
-parameters['word_lstm_dim'] = opts.word_lstm_dim
-parameters['word_bidirect'] = opts.word_bidirect == 1
-parameters['pre_emb'] = opts.pre_emb
-parameters['all_emb'] = opts.all_emb == 1
-parameters['cap_dim'] = opts.cap_dim
-parameters['crf'] = opts.crf == 1
-parameters['dropout'] = opts.dropout
-parameters['reload'] = opts.reload == 1
-parameters['name'] = opts.name
-parameters['char_mode'] = opts.char_mode
-parameters['epochs']=opts.epochs
-
-parameters['norm']=opts.norm
-parameters['adv']=opts.adv
-parameters['alpha']=opts.alpha
-
-
-
-parameters['use_gpu'] = opts.use_gpu == 1 and torch.cuda.is_available()
 use_gpu = parameters['use_gpu']
 
 mapping_file = 'models/mapping.pkl'
@@ -171,20 +33,9 @@ name = parameters['name']
 model_name = models_path + name #get_name(parameters)
 tmp_model = model_name + '.tmp'
 
-
-assert os.path.isfile(opts.train)
-assert os.path.isfile(opts.dev)
-assert os.path.isfile(opts.test)
-assert parameters['char_dim'] > 0 or parameters['word_dim'] > 0
-assert 0. <= parameters['dropout'] < 1.0
-assert parameters['tag_scheme'] in ['iob', 'iobes']
-assert not parameters['all_emb'] or parameters['pre_emb']
-assert not parameters['pre_emb'] or parameters['word_dim'] > 0
-assert not parameters['pre_emb'] or os.path.isfile(parameters['pre_emb'])
-
 if not os.path.exists(models_path):
     os.makedirs(models_path)
-
+    
 lower = parameters['lower']
 zeros = parameters['zeros']
 tag_scheme = parameters['tag_scheme']
@@ -311,8 +162,6 @@ sys.stdout.flush()
 
 from conlleval import evaluate
 
-
-
 def evaluating(model, datas, best_F,display_confusion_matrix = False):
 
     true_tags=[]
@@ -418,10 +267,60 @@ if parameters['norm']:
     model.char_embeds.weight.data=normalize(char_freq_scale,model.char_embeds.weight.data)
     model.word_embeds.weight.data=normalize(word_freq_scale,model.word_embeds.weight.data)
 '''
+
+def gen_input(input_data):
+    data = input_data
+    sentence_in = Variable(torch.LongTensor(data['words'])) 
+    targets = torch.LongTensor(data['tags'])                
+    caps = Variable(torch.LongTensor(data['caps']))          
+    chars2 = data['chars']    
+    
+    if parameters['char_mode'] == 'LSTM':
+        chars2_sorted = sorted(chars2, key=lambda p: len(p), reverse=True)
+        matching_char = {}
+
+        for i, ci in enumerate(chars2):
+            for j, cj in enumerate(chars2_sorted):
+                if ci == cj and not j in matching_char and not i in matching_char.values():
+                    matching_char[j] = i
+                    continue          
+        chars2_length = [len(c) for c in chars2_sorted]
+        char_maxl = max(chars2_length)
+
+        chars2_mask = np.zeros((len(chars2_sorted), char_maxl), dtype='int')
+        for i, c in enumerate(chars2_sorted):
+            chars2_mask[i, :chars2_length[i]] = c
+        chars2_mask = Variable(torch.LongTensor(chars2_mask))
+        
+    if parameters['char_mode'] == 'CNN':
+        matching_char = {}
+        chars2_length = [len(c) for c in chars2]
+        char_maxl = max(chars2_length)
+        chars2_mask = np.zeros((len(chars2_length), char_maxl), dtype='int')
+        for i, c in enumerate(chars2):
+            chars2_mask[i, :chars2_length[i]] = c
+        chars2_mask = Variable(torch.LongTensor(chars2_mask))
+    
+    return  sentence_in, targets, chars2_mask, caps, chars2_length, matching_char
+
+
 model.train(True)
-ratio=1.0
+ratio=0.0
 if parameters['adv']:
     ratio=0.5
+
+if parameters['paraphrase']:
+    #paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe')
+    with open('../para_text/para_token', 'rb') as handle:
+        para_token_map = pickle.load(handle)
+    
+    from weight_scheduler import WarmupWeight
+    num_iters=parameters['epochs']*len(para_token_map.keys())
+    warmup_iter=parameters['warmup']*num_iters
+    
+    ratio_scheduler=WarmupWeight(start_lr=0.5, warmup_iter=warmup_iter, num_iters=num_iters,
+                              warmup_style=parameters['warmup_style'], last_iter=-1, alpha=parameters['exp_weight'])
+    
 
 for epoch in range(parameters['epochs']):
     in_epoch_losses = []
@@ -434,41 +333,7 @@ for epoch in range(parameters['epochs']):
 
         data = train_data[index]
         model.zero_grad()
-
-        sentence_in = data['words']
-        sentence_in = Variable(torch.LongTensor(sentence_in))
-        tags = data['tags']
-        chars2 = data['chars']
-
-        ######### char lstm
-        if parameters['char_mode'] == 'LSTM':
-            chars2_sorted = sorted(chars2, key=lambda p: len(p), reverse=True)
-            d = {}
-            for i, ci in enumerate(chars2):
-                for j, cj in enumerate(chars2_sorted):
-                    if ci == cj and not j in d and not i in d.values():
-                        d[j] = i
-                        continue
-            chars2_length = [len(c) for c in chars2_sorted]
-            char_maxl = max(chars2_length)
-            chars2_mask = np.zeros((len(chars2_sorted), char_maxl), dtype='int')
-            for i, c in enumerate(chars2_sorted):
-                chars2_mask[i, :chars2_length[i]] = c
-            chars2_mask = Variable(torch.LongTensor(chars2_mask))
-
-        # ######## char cnn
-        if parameters['char_mode'] == 'CNN':
-            d = {}
-            chars2_length = [len(c) for c in chars2]
-            char_maxl = max(chars2_length)
-            chars2_mask = np.zeros((len(chars2_length), char_maxl), dtype='int')
-            for i, c in enumerate(chars2):
-                chars2_mask[i, :chars2_length[i]] = c
-            chars2_mask = Variable(torch.LongTensor(chars2_mask))
-
-
-        targets = torch.LongTensor(tags)
-        caps = Variable(torch.LongTensor(data['caps']))
+        sentence_in, targets, chars2_mask, caps, chars2_length, matching_char= gen_input(data)
 
         if use_gpu:
             sentence_in = sentence_in.cuda()
@@ -481,10 +346,37 @@ for epoch in range(parameters['epochs']):
                                                       chars2 = chars2_mask, 
                                                       caps = caps, 
                                                       chars2_length = chars2_length, 
-                                                      matching_char = d)
-
+                                                      matching_char = matching_char)
+        
+        neg_log_likelihood_para=0
+        if parameters['paraphrase']:
+            if index in para_token_map:
+                
+                ratio=ratio_scheduler.step()
+                
+                res = para_token_map[index]
+                random_paraphrase = res[random.randint(0,len(res)-1)]
+                
+                sentence_in_para, targets_para, chars2_mask_para, caps_para, chars2_length_para, matching_char_para = gen_input(random_paraphrase)
+                
+                if use_gpu:
+                    sentence_in_para = sentence_in_para.cuda()
+                    targets_para     = targets_para.cuda()
+                    chars2_mask_para = chars2_mask_para.cuda()
+                    caps_para        = caps_para.cuda()
+                
+                neg_log_likelihood_para = model.neg_log_likelihood(sentence = sentence_in_para, 
+                                                                  tags = targets_para, 
+                                                                  chars2 = chars2_mask_para, 
+                                                                  caps = caps_para, 
+                                                                  chars2_length = chars2_length_para, 
+                                                                  matching_char = matching_char_para)
+                
+            else:
+                ratio = 0.0
+                
         loss = float(neg_log_likelihood.cpu().detach().numpy()) / len(data['words'])
-        neg_log_likelihood=neg_log_likelihood*ratio
+        neg_log_likelihood = neg_log_likelihood*(1-ratio)+ neg_log_likelihood_para*ratio
         neg_log_likelihood.backward()
 
 
@@ -494,14 +386,14 @@ for epoch in range(parameters['epochs']):
                                                           chars2 = chars2_mask, 
                                                           caps = caps, 
                                                           chars2_length = chars2_length, 
-                                                          matching_char = d,
+                                                          matching_char = matching_char,
                                                           adv=True,
                                                           grads=[extracted_grads_char[0]*2,extracted_grads_word[0]*2])
 
 
-            neg_log_likelihood_adv=neg_log_likelihood_adv*(1-ratio)
+            neg_log_likelihood_adv = neg_log_likelihood_adv*(1-ratio)
             neg_log_likelihood_adv.backward()
-            loss = loss+float(neg_log_likelihood_adv.cpu().detach().numpy()) / len(data['words'])
+            loss = loss + float(neg_log_likelihood_adv.cpu().detach().numpy()) / len(data['words'])
 
 
         in_epoch_losses.append(loss)
@@ -554,7 +446,7 @@ for epoch in range(parameters['epochs']):
     #best_train_F, new_train_F, _ = evaluating(model, test_train_data, best_train_F)
     best_dev_F, new_dev_F, save = evaluating(model, dev_data, best_dev_F)
     if save:
-        best_idx=epoch
+        best_idx = epoch
         torch.save(model.state_dict(), model_name)
     best_test_F, new_test_F, _ = evaluating(model, test_data, best_test_F)
 

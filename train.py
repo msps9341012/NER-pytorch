@@ -311,7 +311,7 @@ if parameters['adv']:
 
 if parameters['paraphrase']:
     #paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe')
-    with open('../para_text/para_token', 'rb') as handle:
+    with open('../para_text/para_token_agg', 'rb') as handle:
         para_token_map = pickle.load(handle)
     
     from weight_scheduler import WarmupWeight

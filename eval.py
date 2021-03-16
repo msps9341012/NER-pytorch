@@ -3,7 +3,7 @@ from __future__ import print_function
 import optparse
 import torch
 import time
-import cPickle
+import pickle
 from torch.autograd import Variable
 
 from loader import *
@@ -52,7 +52,7 @@ opts = optparser.parse_args()[0]
 mapping_file = opts.map_path
 
 with open(mapping_file, 'rb') as f:
-    mappings = cPickle.load(f)
+    mappings = pickle.load(f)
 
 word_to_id = mappings['word_to_id']
 tag_to_id = mappings['tag_to_id']

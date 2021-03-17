@@ -35,7 +35,7 @@ class BiLSTM_CRF(nn.Module):
 
     def __init__(self, vocab_size, tag_to_ix, embedding_dim, hidden_dim, char_lstm_dim=25,
                  char_to_ix=None, pre_word_embeds=None, char_embedding_dim=25, use_gpu=False,
-                 n_cap=None, cap_embedding_dim=None, use_crf=True, char_mode='CNN'):
+                 n_cap=None, cap_embedding_dim=None, use_crf=True, char_mode='CNN',alpha=0):
         super(BiLSTM_CRF, self).__init__()
         self.use_gpu = use_gpu
         self.embedding_dim = embedding_dim
@@ -48,6 +48,7 @@ class BiLSTM_CRF(nn.Module):
         self.tagset_size = len(tag_to_ix)
         self.out_channels = char_lstm_dim
         self.char_mode = char_mode
+        self.alpha=alpha
 
         print('char_mode: %s, out_channels: %d, hidden_dim: %d, ' % (char_mode, char_lstm_dim, hidden_dim))
 

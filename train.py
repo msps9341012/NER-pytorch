@@ -24,29 +24,11 @@ from model import BiLSTM_CRF
 from arguments import get_args
 from processor import generate_batch_data, generate_batch_para, generate_batch_rep
 
-optparser = optparse.OptionParser()
-optparser.add_option(
-    "-T", "--train", default="dataset/eng.train",
-    help="Train set location"
-)
-optparser.add_option(
-    "-d", "--dev", default="dataset/eng.testa",
-    help="Dev set location"
-)
-optparser.add_option(
-    "-t", "--test", default="dataset/eng.testb",
-    help="Test set location"
-)
-optparser.add_option(
-    '--test_train', default='dataset/eng.train54019',
-    help='test train'
-)
 
-
+t = time.time()
 
 opts, parameters=get_args()
 
-experiment=None
 
 experiment = Experiment(api_key='Bq7FWdV8LPx8HkWh67e5UmUPm',
                        project_name='NER',
@@ -55,9 +37,41 @@ experiment = Experiment(api_key='Bq7FWdV8LPx8HkWh67e5UmUPm',
 experiment.log_parameters(parameters)
 
 
-
-
 models_path = "models/"
+use_gpu = parameters['use_gpu']
+
+mapping_file = 'models/mapping.pkl'
+
+name = parameters['name']
+model_name = models_path + name #get_name(parameters)
+tmp_model = model_name + '.tmp'
+
+if not os.path.exists(models_path):
+    os.makedirs(models_path)
+    
+lower = parameters['lower']
+zeros = parameters['zeros']
+tag_scheme = parameters['tag_scheme']
+
+train_sentences = loader.load_sentences(opts.train, lower, zeros)
+dev_sentences = loader.load_sentences(opts.dev, lower, zeros)
+test_sentences = loader.load_sentences(opts.test, lower, zeros)
+test_train_sentences = loader.load_sentences(opts.test_train, lower, zeros)
+
+update_tag_scheme(train_sentences, tag_scheme)
+update_tag_scheme(dev_sentences, tag_scheme)
+update_tag_scheme(test_sentences, tag_scheme)
+update_tag_scheme(test_train_sentences, tag_scheme)
+
+dico_words_train = word_mapping(train_sentences, lower)[0]
+
+dico_words, word_to_id, id_to_word = augment_with_pretrained(
+        dico_words_train.copy(),
+        parameters['pre_emb'],
+        list(itertools.chain.from_iterable(
+            [[w[0] for w in s] for s in dev_sentences + test_sentences])
+        ) if not parameters['all_emb'] else None
+    )
 
 
 
@@ -118,14 +132,17 @@ model = BiLSTM_CRF(vocab_size=len(word_to_id),
                    use_crf=parameters['crf'],
                    char_mode=parameters['char_mode'],
                    char_embedding_dim=parameters['char_dim'],
-                   char_lstm_dim=parameters['char_lstm_dim'])
+                   char_lstm_dim=parameters['char_lstm_dim'],
+                   alpha=parameters['alpha'])
                    # n_cap=4,
                    # cap_embedding_dim=10)
+        
 if parameters['reload']:
     print('loading model')
     model.load_state_dict(torch.load(model_name))
 if use_gpu:
     model.cuda()
+
 learning_rate = 0.015
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
 losses = []
@@ -151,7 +168,6 @@ model.train(True)
 ratio=0.0
 if parameters['adv']:
     ratio=0.5
-
     
     
 if parameters['paraphrase']:
@@ -167,7 +183,8 @@ if parameters['paraphrase']:
                               warmup_style=parameters['warmup_style'], last_iter=-1, alpha=parameters['exp_weight'])
     
 
-    
+from conlleval import evaluate
+
 def evaluating_batch(model, datas, best_F,display_confusion_matrix = False):
 
     true_tags=[]
@@ -205,7 +222,6 @@ def evaluating_batch(model, datas, best_F,display_confusion_matrix = False):
     if new_F > best_F:
         best_F = new_F
         save = True
-        print('the best F is ', new_F)
 
     if display_confusion_matrix:
         print(("{: >2}{: >7}{: >7}%s{: >9}" % ("{: >7}" * confusion_matrix.size(0))).format(
@@ -408,34 +424,33 @@ for epoch in range(parameters['epochs']):
     losses.append(np.mean(in_epoch_losses))
     
     metrics['loss_norm']=np.mean(in_epoch_losses)
-    if epoch >= parameters['launch_epoch']:
+    if epoch >= parameters['launch_epoch'] and (parameters['paraphrase'] or parameters['word_rep']):
         metrics['loss_adv']=np.mean(in_epoch_losses_adv)
     else:
         metrics['loss_adv']=0
     
+    
     model.train(False)
-    
-
-    #best_train_F, new_train_F, _ = evaluating(model, test_train_data, best_train_F)
     best_dev_F, new_dev_F, save = evaluating_batch(model, dev_batched, best_dev_F)
-    
     if save:
         best_idx = epoch
         torch.save(model.state_dict(), model_name)
-    
     best_test_F, new_test_F, _ = evaluating_batch(model, test_batched, best_test_F)
-    
-    all_F.append([0.0, new_dev_F, new_test_F])
 
+    all_F.append([0.0, new_dev_F, new_test_F])
+    
+    
     sys.stdout.flush()
-    print('F train/valid/test : %.2f / %.2f / %.2f - %d'%(best_train_F, best_dev_F, best_test_F, best_idx))
+    print('Epoch %d : valid/test/test_best : %.2f / %.2f / %.2f - %d'%(epoch, best_dev_F, new_test_F,best_test_F, best_idx))
     model.train(True)
     adjust_learning_rate(optimizer, lr=learning_rate/(1+0.05*count/len(train_data)))
     
     metrics['new_test_F']=new_test_F
     metrics['new_dev_F']=new_dev_F
+    
     experiment.log_metrics(metrics)
     experiment.set_step(epoch+1)
+    
     
 
 

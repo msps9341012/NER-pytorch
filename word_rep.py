@@ -165,10 +165,15 @@ class Word_Replacement():
         end_tag = False
         current_chunk = []
         
+        #append extra tokens to make is_chunk_end work
+        append_flag=0
+        if sentence[-1][-1]!='O':
+            sentence=sentence+[['.','_','_','O']]
+            append_flag=1
+        
         # 0 : word from original sentence
         # 1 : word from adversarial replacement
         word_seq = []
-    
         for idx in range(len(sentence)):
             ent = sentence[idx]
             tag = ent[3]
@@ -189,8 +194,11 @@ class Word_Replacement():
                 word_seq.append((0, [ent]))
             prev_tag = tag
 
-        #print(word_seq)
         adversarial_examples = self.generate_adversarial_examples(word_seq, max_examples, pool_method, replacement_method)
+        if append_flag:
+            for adversarial_example in adversarial_examples:
+                #remove the extra token
+                adversarial_example.pop(-1)
         
         return adversarial_examples
 
@@ -209,8 +217,8 @@ def main():
     update_tag_scheme(dev_sentences, tag_scheme)
     update_tag_scheme(test_sentences, tag_scheme)
 
-
-    pre_emb = "/mnt/nfs/scratch1/nkhade/glove.6B.100d.txt"
+    #change your path here!!!!
+    pre_emb = "../glove_emb/glove.6B.100d.txt"
     all_emb=1
 
     dico_words_train = word_mapping(train_sentences, lower)[0]
@@ -252,7 +260,8 @@ def main():
 
     print("Train Len : {} , Dev Len : {}".format(len(train_sentences), len(dev_sentences)))
     counter = 1
-
+    
+    
     for sentence in train_sentences:
         print(counter)
         adversarial_examples = wr.create_adv_examples(sentence, 1, "mean", "farthest")

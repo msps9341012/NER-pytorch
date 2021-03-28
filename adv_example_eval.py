@@ -164,7 +164,7 @@ def evaluating_batch(model, datas):
     adv = 0
     true_tags_all=[]
     pred_tags_all=[]
-    micro=[]
+    macro=[]
     for data in datas:
         
         true_tags = []
@@ -202,7 +202,7 @@ def evaluating_batch(model, datas):
             adv = adv+1
         df=df[df['true']!='O'] #only tags
         if len(df)!=0:
-            micro.append(sum(df['true']==df['pred'])/len(df))
+            macro.append(sum(df['true']==df['pred'])/len(df))
         
     
     df_tags = pd.DataFrame({'true':true_tags_all,'pred':pred_tags_all})
@@ -210,7 +210,7 @@ def evaluating_batch(model, datas):
     
     
     print('Micro acc_tag:', sum(df_tags['true']==df_tags['pred'])/len(df_tags))
-    print('Macro acc_tag:', np.mean(micro))
+    print('Macro acc_tag:', np.mean(macro))
     prec, rec, new_F = evaluate(true_tags_all, pred_tags_all, verbose=False)
     print('F 1:',new_F)
     print('Hit:', adv/len(datas))

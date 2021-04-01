@@ -66,6 +66,9 @@ def add_non_adv_args(parser):
     
     return parser
 
+def add_eval_args(parser):
+    parser.add_option("--eval_path", default="rep_text/dev_exp/rep_adv_example_closest_1_dev_pot", help="path to the saved adversarial examples")
+    return parser
 
 
 
@@ -91,6 +94,8 @@ def get_args():
     optparser=add_model_args(optparser)
     optparser=add_non_adv_args(optparser)
     optparser=add_adv_args(optparser)
+    optparser=add_eval_args(optparser)
+
     
     opts = optparser.parse_args()[0]
     parameters = OrderedDict()
@@ -127,7 +132,7 @@ def get_args():
     parameters['word_rep']=opts.word_rep
     
     parameters['use_gpu'] = opts.use_gpu == 1 and torch.cuda.is_available()
-    
+    parameters['eval_path']=opts.eval_path
     
     check_args(opts,parameters)
     

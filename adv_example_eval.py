@@ -3,7 +3,6 @@
 
 from __future__ import print_function
 
-from comet_ml import Experiment
 #import optparse
 import itertools
 from collections import OrderedDict
@@ -27,14 +26,11 @@ from arguments import get_args
 from processor import generate_batch_data, generate_batch_para, generate_batch_rep
 
 
-
 t = time.time()
 
 opts, parameters=get_args()
 
 experiment=None
-
-
 
 models_path = "models/"
 use_gpu = parameters['use_gpu']
@@ -42,6 +38,9 @@ use_gpu = parameters['use_gpu']
 mapping_file = 'models/mapping.pkl'
 
 name = parameters['name']
+
+adv_data_path = parameters['eval_path']
+
 model_name = models_path + name #get_name(parameters)
 tmp_model = model_name + '.tmp'
 
@@ -221,16 +220,19 @@ def evaluating_batch(model, datas):
 should be raw data (not indexing one)
 [[token,_, _,tag],...]
 '''
-adv_data_path='../para_text/para_ppdb_dev_all'
+
 with open(adv_data_path, 'rb') as handle:
     adv_data = pickle.load(handle)
 
 
-# res=[]
-# for i in list(adv_data.values()):
-#     res.append(i[0])
+res=[]
+for i in list(adv_data.values()):
+    if len(i[0])==0:
+        continue
+    res.append(i[0])
 model.eval()
-adv_data=prepare_dataset(adv_data, word_to_id, char_to_id, tag_to_id, lower)
+
+adv_data=prepare_dataset(res, word_to_id, char_to_id, tag_to_id, lower)
 adv_data=generate_batch_data(adv_data,1)
 evaluating_batch(model, adv_data)
 #

@@ -133,10 +133,7 @@ class Word_Replacement():
             if type_word == 1:
                 to_replace[seq_id] = word_seq[seq_id][1]
                 replacement_dict[seq_id] = []
-    
-        if len(replacement_dict) == 0:
-            max_examples = 1
-    
+
         for key in replacement_dict:
             chunk_to_replace = to_replace[key]
             potential_replacements = self.find_top_replacement(chunk_to_replace, max_examples, pool_method, replacement_method)

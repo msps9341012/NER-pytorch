@@ -21,11 +21,12 @@ def check_single_quote(word):
 class Paraphraser():
     
     
-    def __init__(self,path):
+    def __init__(self,path,threshold):
         with torch.no_grad():
             self.scoring_model = GPT2LMHeadModel.from_pretrained('gpt2')
             self.scoring_model.eval()
             self.scoring_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+        self.threshold=threshold
             
         self.pipe = dependency_paraphraser.udpipe.Model(path)
         self.projector = dependency_paraphraser.udpipe.en_udpipe_projector
@@ -52,7 +53,7 @@ class Paraphraser():
             true_order.append(word[0])
             if word[0] in string.punctuation and word[-1]=='O':
                 punct_counter[word[0]]+=1
-            if word[-1].startswith('I') or word[-1].startswith('E') or check_single_quote(word[0]): #combine tags
+            if res and (word[-1].startswith('I') or word[-1].startswith('E') or check_single_quote(word[0])): #combine tags
                 res[-1] = res[-1] + " " + word[0]
                 tag_list[-1] = tag_list[-1] +" "+ word[-1]
             else:
@@ -84,16 +85,29 @@ class Paraphraser():
         res = []
         true_order=' '.join(true_order)
         
+        pop_flag=0
         for i in range(n):
+            if len(text)>2 and text[-1]=="." and tags[-1]=='O':
+                para_w, para_t = self.get_paraphrase(text[:-1],tags[:-1])
+                pop_flag=1
+            else:
+                para_w, para_t = self.get_paraphrase(text,tags)
             para_w, para_t = self.get_paraphrase(text,tags)
+            
+            if pop_flag:
+                para_w += [word_list[-1][0]]
+                para_t += [word_list[-1][-1]]
             
             assert len(para_w) == len(para_t), 'error'
             para_text=" ".join(para_w)
-            #para_w += [word_list[-1][0]]
-            #para_t += [word_list[-1][-1]]
-            
-            if para_text!=true_order and self.perplexity_score(para_text)<285:
-                res.append([para_w, para_t])
+
+            if para_text!=true_order and self.perplexity_score(para_text)<self.threshold:
+                tmp=[]
+                for word, tag in zip(para_w, para_t):
+                    tmp.append([word,'_','_',tag])
+             
+                res.append(tmp)
+                
                 
         return res
     

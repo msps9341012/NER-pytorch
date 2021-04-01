@@ -5,15 +5,21 @@
 !wget http://nlp.stanford.edu/data/glove.6B.zip
 !unzip glove.6B.zip
 ```
-+ Train and evaluate.
-   + It supports CNN and Bi-LSTM for the character level.
-   + The below example use the parameters settings from [Robust Multilingual Part-of-Speech Tagging via Adversarial Training](https://www.aclweb.org/anthology/N18-1089.pdf)
+
+
++ Generate adv examples
 ```
-cd NER-pytorch
-!python train.py --char_mode LSTM --char_dim 30 --char_lstm_dim 50 --pre_emb ../glove.6B.100d.txt
+python gen_adv_pipline.py --pre_emb ../glove_emb/glove.6B.100d.txt --save_dir ../para_text/ --name 5_train --dataset train --order rep --n 5
 ```
-+ To see all supporting arguments,
+This command will ouptut a file named '5_train_rep'.
+
+
++ Train
 ```
-!python train.py -h
+python train.py --char_mode LSTM --char_dim 30 --char_lstm_dim 50 --pre_emb ../glove_emb/glove.6B.100d.txt --name rep --non_gradient --per_adv 5 --adv_path ../para_text/5_train_rep
 ```
 
++ Get inference metrics
+```
+python adv_example_eval.py --char_mode LSTM --char_dim 30 --char_lstm_dim 50 --pre_emb ../glove_emb/glove.6B.100d.txt --reload 1 --name normal --per_adv 10 --adv_path ../para_text/10_dev_new_dev_rep
+```

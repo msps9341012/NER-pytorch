@@ -39,8 +39,6 @@ mapping_file = 'models/mapping.pkl'
 
 name = parameters['name']
 
-adv_data_path = parameters['eval_path']
-
 model_name = models_path + name #get_name(parameters)
 tmp_model = model_name + '.tmp'
 

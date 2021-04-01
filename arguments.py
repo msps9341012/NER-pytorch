@@ -67,10 +67,6 @@ def add_non_adv_args(parser):
     
     return parser
 
-def add_eval_args(parser):
-    parser.add_option("--eval_path", default="rep_text/dev_exp/rep_adv_example_closest_1_dev_pot", help="path to the saved adversarial examples")
-    return parser
-
 
 
 def check_args(opts, parameters):

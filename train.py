@@ -31,6 +31,7 @@ t = time.time()
 
 opts, parameters=get_args()
 
+#experiment=None
 
 experiment = Experiment(api_key='Bq7FWdV8LPx8HkWh67e5UmUPm',
                        project_name='NER',
@@ -113,15 +114,15 @@ for w in word_to_id:
 
 print('Loaded %i pretrained embeddings.' % len(all_word_embeds))
 
-with open(mapping_file, 'wb') as f:
-    mappings = {
-        'word_to_id': word_to_id,
-        'tag_to_id': tag_to_id,
-        'char_to_id': char_to_id,
-        'parameters': parameters,
-        'word_embeds': word_embeds
-    }
-    cPickle.dump(mappings, f)
+# with open(mapping_file, 'wb') as f:
+#     mappings = {
+#         'word_to_id': word_to_id,
+#         'tag_to_id': tag_to_id,
+#         'char_to_id': char_to_id,
+#         'parameters': parameters,
+#         'word_embeds': word_embeds
+#     }
+#     cPickle.dump(mappings, f)
 
 print('word_to_id: ', len(word_to_id))
 model = BiLSTM_CRF(vocab_size=len(word_to_id),
@@ -172,17 +173,8 @@ if parameters['adv']:
     ratio=0.5
     
     
-if parameters['paraphrase']:
-    #paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe')
-    with open('../para_text/para_token_agg_10', 'rb') as handle:
-        para_token_map = pickle.load(handle)
-    
-    from weight_scheduler import WarmupWeight
-    num_iters=(parameters['epochs']-parameters['launch_epoch'])*len(para_token_map.keys())
-    warmup_iter=parameters['warmup']*num_iters
-    
-    ratio_scheduler=WarmupWeight(start_lr=0.5, warmup_iter=warmup_iter, num_iters=num_iters,
-                              warmup_style=parameters['warmup_style'], last_iter=-1, alpha=parameters['exp_weight'])
+
+
     
 
 from conlleval import evaluate
@@ -218,7 +210,6 @@ def evaluating_batch(model, datas, best_F,display_confusion_matrix = False):
             true_tags.append(id_to_tag[true_id])
             pred_tags.append(id_to_tag[pred_id])
             confusion_matrix[true_id, pred_id] += 1
-    
     prec, rec, new_F = evaluate(true_tags, pred_tags, verbose=False)
 
     if new_F > best_F:
@@ -242,55 +233,72 @@ def evaluating_batch(model, datas, best_F,display_confusion_matrix = False):
 
 
 #random.shuffle(train_data)
-if parameters['paraphrase']:
-    '''
-    since some examples don't have paraphrase, separate them into two parts.
-    And then pack into batch.
-    '''
-    train_have_para=[]
-    train_left=[]
-    for i in range(len(train_data)):
-        if i in para_token_map:
-            train_have_para.append(train_data[i])
-        else:
-            train_left.append(train_data[i])
-    
-    train_have_para = generate_batch_data(train_have_para,5)
-    train_left = generate_batch_data(train_left,5)
-    para_batch = generate_batch_para(para_token_map,5)
-    train_batched = train_have_para + train_left
 
-elif parameters['word_rep']:
+#     train_have_para=[]
+#     train_left=[]
+#     for i in range(len(train_data)):
+#         if i in para_token_map:
+#             train_have_para.append(train_data[i])
+#         else:
+#             train_left.append(train_data[i])
+    
+#     train_have_para = generate_batch_data(train_have_para,5)
+#     train_left = generate_batch_data(train_left,5)
+#     para_batch = generate_batch_para(para_token_map,5)
+#     train_batched = train_have_para + train_left
+
+if parameters['non_gradient']:
     '''
     same logic as above
     '''
+    def divide_chunks(l, n):
+        for i in range(0, len(l), n): 
+            yield l[i:i + n]
+            
+    with open(parameters['adv_path'], 'rb') as handle:
+        adv_data = pickle.load(handle)
     
-    with open('../rep_text/rep_token_agg_complete', 'rb') as handle:
-        rep_token_map = pickle.load(handle)
+    assert len(train_data)==len(adv_data), 'different length'
+    
+    if parameters['per_adv']==1:
+        train_batched=generate_batch_data(train_data,5)
+        adv_data = unpacked_data(adv_data)
+        adv_data = prepare_dataset(adv_data, word_to_id, char_to_id, tag_to_id, lower)
+        adv_batched = generate_batch_data(adv_data,5)
         
-    train_have_rep=[]
-    train_left=[]
-    
-    assert len(train_data)==len(rep_token_map), 'different length'
-    for i in range(len(rep_token_map)):
-        if rep_token_map[i]['str_words']:
-            train_have_rep.append(train_data[i])            
-        else:
-            train_left.append(train_data[i])
+    else:
+        train_have_adv=[]
+        train_left=[]
+        adv_examples=[]
+        
+        number_of_adv=parameters['per_adv']
+        
+        for index in range(len(adv_data)):
 
-    train_have_rep = generate_batch_data(train_have_rep,5)
-    train_left = generate_batch_data(train_left,5)
-    rep_batch = generate_batch_rep(rep_token_map,5)
-    train_batched = train_have_rep + train_left
+            if len(adv_data[index]) != number_of_adv:
+                train_left.append(train_data[index])
+
+            else:
+                indexed_data = prepare_dataset(adv_data[index], word_to_id, char_to_id, tag_to_id, lower)
+                adv_examples.append(generate_batch_data(indexed_data,number_of_adv)[0])
+                train_have_adv.append(train_data[index])
+
+        train_have_adv = generate_batch_data(train_have_adv,5)
+        train_left = generate_batch_data(train_left,5)
+        train_batched = train_have_adv + train_left
+        
+        adv_batched = list(divide_chunks(adv_examples, 5))
+    
+        assert len(adv_batched)==len(train_have_adv), 'different batch length'
     
     from weight_scheduler import WarmupWeight
     #since rep_token_map may contain empty example, use rep_batch to approximate
-    num_iters=(parameters['epochs']-parameters['launch_epoch'])*(len(rep_batch)*5)
+    num_iters=(parameters['epochs']-parameters['launch_epoch'])*len(adv_batched)
     warmup_iter=parameters['warmup']*num_iters
     
     ratio_scheduler=WarmupWeight(start_lr=0.5, warmup_iter=warmup_iter, num_iters=num_iters,
                               warmup_style=parameters['warmup_style'], last_iter=-1, alpha=parameters['exp_weight'])
-    
+
     
     
 else:
@@ -299,7 +307,7 @@ else:
 dev_batched=generate_batch_data(dev_data,1)
 test_batched=generate_batch_data(test_data,1)
 
-
+best_dev_F, new_dev_F, save = evaluating_batch(model, dev_batched, 0)
 
 
 #To-do: combine para and rep together
@@ -340,79 +348,50 @@ for epoch in range(parameters['epochs']):
                                         caps = caps, chars2_length = chars2_length, word_length=word_length)
         
         
-        #To-do: unified the loss variable name for para and rep.
-        neg_log_likelihood_para=0
-        if parameters['paraphrase']:
-            if index < len(para_batch) and epoch >= parameters['launch_epoch']:
+        neg_log_likelihood_adv=0
+        if parameters['non_gradient']:
+            if index < len(adv_batched) and epoch >= parameters['launch_epoch']:
                 
                 ratio=ratio_scheduler.step()
                 
+                adv_batch_input = adv_batched[index]
                 
-                for para_data in para_batch[index]:
-                    sentence_in_para=Variable(torch.LongTensor(para_data['words']))
-                    chars2_mask_para=Variable(torch.LongTensor(para_data['chars']))
-                    caps_para=Variable(torch.LongTensor(para_data['caps']))
-                    targets_para = torch.LongTensor(para_data['tags']) 
-                    chars2_length_para = para_data['char_length']
-                    word_length_para=para_data['word_length']
+                if parameters['per_adv']==1:
+                    adv_batch_input=[adv_batch_input]
+                count=0
+                for adv_exmple in adv_batch_input:
+                    sentence_in_adv=Variable(torch.LongTensor(adv_exmple['words']))
+                    chars2_mask_adv=Variable(torch.LongTensor(adv_exmple['chars']))
+                    caps_adv=Variable(torch.LongTensor(adv_exmple['caps']))
+                    targets_adv = torch.LongTensor(adv_exmple['tags']) 
+                    chars2_length_adv = adv_exmple['char_length']
+                    word_length_adv=adv_exmple['word_length']
                 
                     if use_gpu:
-                        sentence_in_para = sentence_in_para.cuda()
-                        targets_para     = targets_para.cuda()
-                        chars2_mask_para = chars2_mask_para.cuda()
-                        caps_para        = caps_para.cuda()
+                        sentence_in_adv = sentence_in_adv.cuda()
+                        targets_adv     = targets_adv.cuda()
+                        chars2_mask_adv = chars2_mask_adv.cuda()
+                        caps_adv        = caps_adv.cuda()
                 
-                    neg_log_likelihood_para += model.loss(sentence = sentence_in_para, 
-                                                         tags = targets_para, 
-                                                         chars = chars2_mask_para, 
-                                                         caps = caps_para, 
-                                                         chars2_length = chars2_length_para, 
-                                                         word_length=word_length_para)
-                
-                neg_log_likelihood_para=neg_log_likelihood_para/len(para_batch[index])
-                in_epoch_losses_adv.append(float(neg_log_likelihood_para.cpu().detach().numpy()))
-                
-                
-            else:
-                ratio = 0.0
-                
-        neg_log_likelihood_rep=0
-        if parameters['word_rep']:
-            if index < len(rep_batch) and epoch >= parameters['launch_epoch']:
-                
-                ratio=ratio_scheduler.step()
-                rep_data=rep_batch[index]
-                
-                sentence_in_rep=Variable(torch.LongTensor(rep_data['words']))
-                chars2_mask_rep=Variable(torch.LongTensor(rep_data['chars']))
-                caps_rep=Variable(torch.LongTensor(rep_data['caps']))
-                targets_rep = torch.LongTensor(rep_data['tags']) 
-                chars2_length_rep = rep_data['char_length']
-                word_length_rep=rep_data['word_length']
-                
-                if use_gpu:
-                    sentence_in_rep = sentence_in_rep.cuda()
-                    targets_rep     = targets_rep.cuda()
-                    chars2_mask_rep = chars2_mask_rep.cuda()
-                    caps_rep        = caps_rep.cuda()
-
-                neg_log_likelihood_rep = model.loss(sentence = sentence_in_rep, 
-                                                     tags = targets_rep, 
-                                                     chars = chars2_mask_rep, 
-                                                     caps = caps_rep, 
-                                                     chars2_length = chars2_length_rep, 
-                                                     word_length=word_length_rep)
-                
-                in_epoch_losses_adv.append(float(neg_log_likelihood_rep.cpu().detach().numpy()))
+                    neg_log_likelihood_adv += model.loss(sentence = sentence_in_adv, 
+                                                         tags = targets_adv, 
+                                                         chars = chars2_mask_adv, 
+                                                         caps = caps_adv, 
+                                                         chars2_length = chars2_length_adv, 
+                                                         word_length=word_length_adv)
+                    count=count+1
+                neg_log_likelihood_adv=neg_log_likelihood_adv/count
+                in_epoch_losses_adv.append(float(neg_log_likelihood_adv.cpu().detach().numpy()))
                 
                 
             else:
                 ratio = 0.0
+                
+       
                 
         loss = float(neg_log_likelihood.cpu().detach().numpy())
         
-        #To-do: unified the loss variable name for para and rep.
-        neg_log_likelihood = neg_log_likelihood*(1-ratio)+ (neg_log_likelihood_para + neg_log_likelihood_rep)*ratio
+        neg_log_likelihood = neg_log_likelihood*(1-ratio)+ neg_log_likelihood_adv *ratio
         neg_log_likelihood.backward()
         
         in_epoch_losses.append(loss)
@@ -426,7 +405,7 @@ for epoch in range(parameters['epochs']):
     losses.append(np.mean(in_epoch_losses))
     
     metrics['loss_norm']=np.mean(in_epoch_losses)
-    if epoch >= parameters['launch_epoch'] and (parameters['paraphrase'] or parameters['word_rep']):
+    if epoch >= parameters['launch_epoch'] and parameters['non_gradient']:
         metrics['loss_adv']=np.mean(in_epoch_losses_adv)
     else:
         metrics['loss_adv']=0

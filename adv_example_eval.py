@@ -215,25 +215,35 @@ def evaluating_batch(model, datas):
     print('F 1:',new_F)
     print('Hit:', adv/len(datas))
 
-
-
 '''
-should be raw data (not indexing one)
-[[token,_, _,tag],...]
+The input data should be packed
+[[example_1], ...]
+example_1=[[word,_,_,tag]...]
 '''
-adv_data_path='../para_text/para_ppdb_dev_all'
-with open(adv_data_path, 'rb') as handle:
+
+with open(parameters['adv_path'], 'rb') as handle:
     adv_data = pickle.load(handle)
+if parameters['per_adv']==1:
+    adv_data = unpacked_data(adv_data)
+    
+    adv_data = prepare_dataset(adv_data, word_to_id, char_to_id, tag_to_id, lower)
+    adv_batched = generate_batch_data(adv_data,1)
 
-
-# res=[]
-# for i in list(adv_data.values()):
-#     res.append(i[0])
+else:
+    #do unpacking manually 
+    res=[]
+    for batch in adv_data:
+        for example in batch:
+            res.append(example)
+    breakpoint()
+    adv_batched = prepare_dataset(res, word_to_id, char_to_id, tag_to_id, lower)
+    adv_batched = generate_batch_data(adv_batched,1)
+    
+    
+    
 model.eval()
-adv_data=prepare_dataset(adv_data, word_to_id, char_to_id, tag_to_id, lower)
-adv_data=generate_batch_data(adv_data,1)
-evaluating_batch(model, adv_data)
-#
+evaluating_batch(model, adv_batched)
+
 '''
 dev_batched=generate_batch_data(dev_data,1)
 evaluating_batch(model, dev_batched)

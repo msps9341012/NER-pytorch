@@ -3,6 +3,14 @@ import os
 import re
 import numpy as np
 
+
+def packed_data(data):
+    return [[i] for i in data]
+def unpacked_data(data):
+    return [i[0] for i in data]
+
+
+
 def get_name(parameters):
     """
     Generate a model name from its parameters.

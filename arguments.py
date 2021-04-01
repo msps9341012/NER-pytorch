@@ -57,12 +57,13 @@ def add_adv_args(parser):
 
 
 def add_non_adv_args(parser):
-    parser.add_option("--paraphrase", action='store_true',help='adding paraphrases or not')
+    parser.add_option("--non_gradient", action='store_true',help='using non-gradient adv examples or not')
     parser.add_option('--warmup', type=float, default="0.01",help='percentage of data to warmup on (.01 = 1% of all training iters). Default 0.01')
     parser.add_option('--warmup_style', choices=['constant','linear','exponential'], default='linear',help='learning rate decay function')
     parser.add_option("--exp_weight", default='1.0',type='float', help='weight for exp')
     parser.add_option("--launch_epoch", default='0',type='int', help='introducing paraphrases after certain epoch')
-    parser.add_option("--word_rep", action='store_true',help='adding word rep or not')
+    parser.add_option("--per_adv", default='1',type='int', help='number of generated adv examples for one training sample ')
+    parser.add_option("--adv_path", default="",help="Path to adv examples")
     
     return parser
 
@@ -123,16 +124,20 @@ def get_args():
     parameters['alpha']=opts.alpha
     
     
-    parameters['paraphrase']=opts.paraphrase
+    parameters['non_gradient']=opts.non_gradient
     parameters['exp_weight']=opts.exp_weight
     parameters['warmup']=opts.warmup
     parameters['warmup_style']=opts.warmup_style
     parameters['launch_epoch']=opts.launch_epoch
+    parameters['per_adv']=opts.per_adv
+    parameters['adv_path']=opts.adv_path
     
-    parameters['word_rep']=opts.word_rep
     
     parameters['use_gpu'] = opts.use_gpu == 1 and torch.cuda.is_available()
+<<<<<<< HEAD
     parameters['eval_path']=opts.eval_path
+=======
+>>>>>>> 7b025c3afd537739b0b9f792326a63b770a27783
     
     check_args(opts,parameters)
     

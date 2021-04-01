@@ -163,7 +163,7 @@ def evaluating_batch(model, datas):
     adv = 0
     true_tags_all=[]
     pred_tags_all=[]
-    micro=[]
+    macro=[]
     for data in datas:
         
         true_tags = []
@@ -201,7 +201,7 @@ def evaluating_batch(model, datas):
             adv = adv+1
         df=df[df['true']!='O'] #only tags
         if len(df)!=0:
-            micro.append(sum(df['true']==df['pred'])/len(df))
+            macro.append(sum(df['true']==df['pred'])/len(df))
         
     
     df_tags = pd.DataFrame({'true':true_tags_all,'pred':pred_tags_all})
@@ -209,33 +209,40 @@ def evaluating_batch(model, datas):
     
     
     print('Micro acc_tag:', sum(df_tags['true']==df_tags['pred'])/len(df_tags))
-    print('Macro acc_tag:', np.mean(micro))
+    print('Macro acc_tag:', np.mean(macro))
     prec, rec, new_F = evaluate(true_tags_all, pred_tags_all, verbose=False)
     print('F 1:',new_F)
     print('Hit:', adv/len(datas))
 
-
-
 '''
-should be raw data (not indexing one)
-[[token,_, _,tag],...]
+The input data should be packed
+[[example_1], ...]
+example_1=[[word,_,_,tag]...]
 '''
 
-with open(adv_data_path, 'rb') as handle:
+with open(parameters['adv_path'], 'rb') as handle:
     adv_data = pickle.load(handle)
+if parameters['per_adv']==1:
+    adv_data = unpacked_data(adv_data)
+    
+    adv_data = prepare_dataset(adv_data, word_to_id, char_to_id, tag_to_id, lower)
+    adv_batched = generate_batch_data(adv_data,1)
 
-
-res=[]
-for i in list(adv_data.values()):
-    if len(i[0])==0:
-        continue
-    res.append(i[0])
+else:
+    #do unpacking manually 
+    res=[]
+    for batch in adv_data:
+        for example in batch:
+            res.append(example)
+    breakpoint()
+    adv_batched = prepare_dataset(res, word_to_id, char_to_id, tag_to_id, lower)
+    adv_batched = generate_batch_data(adv_batched,1)
+    
+    
+    
 model.eval()
+evaluating_batch(model, adv_batched)
 
-adv_data=prepare_dataset(res, word_to_id, char_to_id, tag_to_id, lower)
-adv_data=generate_batch_data(adv_data,1)
-evaluating_batch(model, adv_data)
-#
 '''
 dev_batched=generate_batch_data(dev_data,1)
 evaluating_batch(model, dev_batched)

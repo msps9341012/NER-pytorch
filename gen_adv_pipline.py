@@ -84,7 +84,7 @@ def load_data(pre_emb):
                 filter_ppdb_list.append(i)
     
     filter_ppdb_list = set(filter_ppdb_list) | set(dico_words_train.keys()) 
-    
+       
     train_sentences_packed = packed_data(train_sentences)
     dev_sentences_packed = packed_data(dev_sentences)
     test_sentences_packed = packed_data(test_sentences)
@@ -92,6 +92,10 @@ def load_data(pre_emb):
     return train_sentences_packed, dev_sentences_packed, test_sentences_packed, word_embeds, word_to_id, filter_ppdb_list
 
 def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank):
+    '''
+    If the data has already been processed via different method, then modify on them.
+    Or, generate n adv examples using this method.
+    '''
 
     word_bank = unpacked_data(word_bank)
     wr = Word_Replacement(lower, word_to_id, word_embeds, word_bank)
@@ -118,26 +122,43 @@ def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank):
 
 
 def using_para(dataset, n):
+    '''
+    Since this method may not be able to generate n adv examples, be sure to put it in the last order.
+    '''
     counter=0
     paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe',1000)
-    para_adv=[]
-    for sentence in tqdm(dataset):
-        res=paraphraser.generate_n_paraphrases(sentence, n)
-        if res:
-            counter=counter+1
-            para_adv.append(res)
-        else:
-            para_adv.append([sentence])
+    res=[]
     
-    print('%Examples modified by para:', counter/len(para_adv))
-    return para_adv
+    for sentence_pack in tqdm(dataset):
+        adv_example=[]
+        for sentence in sentence_pack:
+            para_example=paraphraser.generate_n_paraphrases(sentence, 1)
+            if para_example:
+                counter=counter+1
+                adv_example.append(para_example[0])
+            else:
+                adv_example.append(sentence)
+        res.append(adv_example)
+    print('%Examples modified by para:', counter/(len(res)*n))
+    return res
 
 def using_ppdb(dataset,n, word_map):
+    '''
+    If the data has already been processed via different method, then modify on them individually.
+    Or, generate n adv examples using this method.
+    '''
     ppdb = PPDB_Replacement('../ppdb/ppdb_all', word_map)
     res=[]
     index=0
-    for i in tqdm(dataset):
-        res.append(ppdb.para_examples(i,index))
+    for sentence_pack in tqdm(dataset):
+        adv_example=[]
+        if len(sentence_pack)==n:
+            for sentence in sentence_pack:
+                adv_example.append(ppdb.para_examples(sentence,index))
+        else:
+            for _ in range(n):
+                adv_example.append(ppdb.para_examples(sentence_pack[0],index))
+        res.append(adv_example)
         index=index+1
     print('%Examples modified by ppdb:', len(ppdb.id_of_change_examples)/len(res))
     return res
@@ -237,7 +258,7 @@ def main():
             print('generate adv-examples via rep')
 
             if 'rep' in method_to_path:
-                adv_by_rep = load_preprocessed(method_to_path['rep'])
+                updated_data = load_preprocessed(method_to_path['rep'])
                 print('used pre-processed data {}'.format(method_to_path['rep']))
             else:
                 if updated_data:

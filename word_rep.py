@@ -139,7 +139,7 @@ class Word_Replacement():
         return top_replacements
         
         
-#         
+        
         
 #         possible_replacements = self.map_tag_to_chunks[tag_type] 
     
@@ -171,6 +171,7 @@ class Word_Replacement():
 #                     top_replacements.append(possible_replacements[sort_index[res_idx]][0])
 #                     max_replacements -= 1
 #                 res_idx = res_idx + 1
+#         return top_replacements
                  
         
          

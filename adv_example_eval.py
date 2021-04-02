@@ -3,7 +3,6 @@
 
 from __future__ import print_function
 
-from comet_ml import Experiment
 #import optparse
 import itertools
 from collections import OrderedDict
@@ -27,14 +26,11 @@ from arguments import get_args
 from processor import generate_batch_data, generate_batch_para, generate_batch_rep
 
 
-
 t = time.time()
 
 opts, parameters=get_args()
 
 experiment=None
-
-
 
 models_path = "models/"
 use_gpu = parameters['use_gpu']
@@ -42,6 +38,7 @@ use_gpu = parameters['use_gpu']
 mapping_file = 'models/mapping.pkl'
 
 name = parameters['name']
+
 model_name = models_path + name #get_name(parameters)
 tmp_model = model_name + '.tmp'
 

@@ -130,10 +130,6 @@ def get_args():
     
     
     parameters['use_gpu'] = opts.use_gpu == 1 and torch.cuda.is_available()
-<<<<<<< HEAD
-    parameters['eval_path']=opts.eval_path
-=======
->>>>>>> 7b025c3afd537739b0b9f792326a63b770a27783
     
     check_args(opts,parameters)
     

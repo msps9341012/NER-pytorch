@@ -1,0 +1,13 @@
+comet_ml==3.3.4
+transformers==4.3.3
+nltk==3.5
+matplotlib==3.3.4
+numpy==1.19.2
+pandas==1.2.3
+pyconll==3.0.4
+scipy==1.6.1
+torch==1.7.1
+faiss==1.7.0
+tqdm==4.59.0
+ufal.udpipe==1.2.0.3
+scikit_learn==0.24.1

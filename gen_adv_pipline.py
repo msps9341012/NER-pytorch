@@ -25,6 +25,7 @@ def add_args(parser):
     parser.add_option("--preprocess_set", default="",help="Location of preprocessed set")
     parser.add_option("--name", default="",help="filename for saving")
     parser.add_option("--save_dir", default="",help="directory for storing the generated data")
+    parser.add_option("--bert", action='store_true',help="using bert embedding")
     return parser
 
 
@@ -126,7 +127,7 @@ def using_para(dataset, n):
     Since this method may not be able to generate n adv examples, be sure to put it in the last order.
     '''
     counter=0
-    paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe',1000)
+    paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe',500)
     res=[]
     
     for sentence_pack in tqdm(dataset):
@@ -267,8 +268,12 @@ def main():
                 else:
                     print('used {}'.format(opts.dataset))
                     data_to_rep = dataset_map[opts.dataset]
-
-                updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, word_embeds, dataset_map[opts.wordbank])
+                
+                if opts.bert:
+                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, 'bert', dataset_map[opts.wordbank])
+                else:
+                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, word_embeds, dataset_map[opts.wordbank])
+                    
                 assert len(updated_data)==len(data_to_rep), 'error'
                 savefile(updated_data, opts, agg_name)
 

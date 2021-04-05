@@ -213,7 +213,7 @@ class BiLSTM_CRF(nn.Module):
            
         return scores, tag_seq
 
-    def loss(self, sentence, chars, caps, chars2_length, tags, word_length):
+    def loss(self, sentence, chars, caps, chars2_length, tags, word_length, avg=True):
         features, masks = self._get_lstm_features(sentence, chars, caps, chars2_length, word_length)
-        loss = self.crf.loss(features, tags, masks=masks)
+        loss = self.crf.loss(features, tags, masks=masks, avg=avg)
         return loss

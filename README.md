@@ -12,9 +12,9 @@
 ```
 python get_bert_embedding.py
 ```
-It will generate two files that will be further used in the below pipeline.
-See more descriptions in the py file.
-Haven't added arguments for setting path and name, should change it manually.
+It will generate two files that will be further used in the below pipeline. \
+See more descriptions in the py file.\
+Haven't added arguments for setting path and name, should change it manually. \
 
 
 + Generate adv examples

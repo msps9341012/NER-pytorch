@@ -97,8 +97,7 @@ def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank):
     If the data has already been processed via different method, then modify on them.
     Or, generate n adv examples using this method.
     '''
-
-    word_bank = unpacked_data(word_bank)
+    
     wr = Word_Replacement(lower, word_to_id, word_embeds, word_bank)
     
 #     word_bank=unpacked_data(word_bank)
@@ -270,9 +269,15 @@ def main():
                     data_to_rep = dataset_map[opts.dataset]
                 
                 if opts.bert:
-                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, 'bert', dataset_map[opts.wordbank])
+                    path_map = {'train':'../tag_embed/train_bert', 'dev':'../tag_embed/dev_bert'}
+                    
+                    word_bank_path = path_map[opts.wordbank]
+                    
+                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, 'bert', word_bank_path)
                 else:
-                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, word_embeds, dataset_map[opts.wordbank])
+
+                    word_bank = unpacked_data(dataset_map[opts.wordbank])
+                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, word_embeds, word_bank)
                     
                 assert len(updated_data)==len(data_to_rep), 'error'
                 savefile(updated_data, opts, agg_name)

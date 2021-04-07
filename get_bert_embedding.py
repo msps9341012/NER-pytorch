@@ -1,0 +1,178 @@
+from __future__ import print_function
+
+import numpy as np
+from tqdm import tqdm
+import itertools
+import loader
+from utils import *
+from loader import *
+from conlleval import split_tag, is_chunk_end, is_chunk_start
+from scipy import spatial
+import pickle
+import copy
+import faiss
+from collections import defaultdict
+import torch
+from transformers import BertModel, BertTokenizer
+
+
+pool_method_ids = {"mean":0, "min":1, "max":2}
+tags_all = ['LOC', 'MISC', 'PER', 'ORG']
+
+class Bert:
+    def __init__(self):
+        model_name = 'bert-base-uncased'
+        self.tokenizer = BertTokenizer.from_pretrained(model_name)
+        self.model = BertModel.from_pretrained(model_name)
+    def get_embedding(self,input_text):
+        input_text = input_text.lower()
+        input_ids = self.tokenizer.encode(input_text, add_special_tokens=True)
+        input_ids = torch.tensor([input_ids])
+        with torch.no_grad():
+            last_hidden_states = self.model(input_ids)[0]
+            
+        return input_ids.cpu().detach().numpy(), last_hidden_states[0].cpu().detach().numpy()
+
+    
+class Embedding_Processor:
+    def __init__(self):
+        self.bert_model = Bert()
+        self.map_tag_to_embed = defaultdict(dict)
+        self.tag_string_to_chuck=defaultdict(dict)
+
+        
+     
+    def create_tag_chunks(self, sentence):
+
+            # """ 
+            # Append the chunks in the 
+            # """
+            start=1
+            for ent in sentence:
+                ids = self.bert_model.tokenizer.encode(ent[0], add_special_tokens=False)
+                ent.append(start)
+                start=start+len(ids)
+                
+            append_flag=0
+            if sentence[-1][-1]!='O':
+                sentence=sentence+[['.','_','_','O']]
+                append_flag=1
+
+            prev_tag = 'O'
+            start_tag = False
+            end_tag = False
+            current_chunk = []
+            tag_word_map=defaultdict(list)
+            for ent in sentence:
+                tag = ent[3]
+                end_tag = is_chunk_end(prev_tag, tag)
+                if end_tag and len(current_chunk) > 0:
+                    _ , tag_type = split_tag(current_chunk[-1][3])
+                    tag_word_map[tag_type].append(current_chunk)
+                    current_chunk = []
+                    start_tag = False
+
+                if not start_tag:
+                    start_tag = is_chunk_start(prev_tag, tag)
+                if start_tag:
+                    current_chunk.append(ent)
+                prev_tag = tag
+
+
+            if append_flag:
+                sentence.pop(-1)
+
+            self.get_embedding(sentence, tag_word_map)
+
+
+    def convert_to_string(self, ent):
+        string_list = [i[0] for i in ent]
+        return " ".join(string_list).lower()
+
+        
+        
+    def get_embedding(self, sentence, tag_word_map):
+        sentence_string = self.convert_to_string(sentence)
+        token_ids, emb = self.bert_model.get_embedding(sentence_string)
+
+        token_ids =np.squeeze(token_ids)
+        for tag_type in tag_word_map:
+            words = tag_word_map[tag_type]
+            for ent in words:
+                tag_string = self.convert_to_string(ent)
+                first_sub_word_index = ent[0][-1]
+                tags_emb = emb[first_sub_word_index]
+                if tag_string in self.map_tag_to_embed[tag_type]:
+                    self.map_tag_to_embed[tag_type][tag_string].append(tags_emb)
+
+                else:
+                    self.map_tag_to_embed[tag_type][tag_string] = [tags_emb]
+                    for i in ent:
+                        i.pop(-1)
+                    self.tag_string_to_chuck[tag_type][tag_string]= ent
+        
+         
+
+    def pooling(self):
+        for tag_type in self.map_tag_to_embed:
+            for word in self.map_tag_to_embed[tag_type]:
+                embs = self.map_tag_to_embed[tag_type][word]
+                embs = np.array(embs).mean(axis=0)
+                self.map_tag_to_embed[tag_type][word] = embs
+
+        return self.map_tag_to_embed
+            
+        
+    
+    
+         
+        
+
+    
+def main():
+    
+    
+    
+    ep = Embedding_Processor()
+    
+    lower = 1
+    zeros = 0
+    tag_scheme = 'iobes'
+    word_dim = 100
+
+    train_sentences = loader.load_sentences('dataset/eng.train', lower, zeros)
+    dev_sentences = loader.load_sentences("dataset/eng.testa", lower, zeros)
+    test_sentences = loader.load_sentences("dataset/eng.testb", lower, zeros)
+
+    update_tag_scheme(train_sentences, tag_scheme)
+    update_tag_scheme(dev_sentences, tag_scheme)
+    update_tag_scheme(test_sentences, tag_scheme)
+
+    
+    for i in tqdm(dev_sentences):
+        ep.create_tag_chunks(i)
+    
+    map_tag_to_embed = ep.pooling()
+
+    
+    if not os.path.exists('../tag_embed'):
+        os.makedirs('../tag_embed')
+    
+    with open('../tag_embed/dev_bert', 'wb') as handle:
+        '''
+        tag_string->embedding vector
+        '''
+        pickle.dump(map_tag_to_embed, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+    with open('../tag_embed/dev_bert_chunck_map', 'wb') as handle:
+        '''
+        tag_string->chunk ([[word,..,tag],...])
+        '''
+        pickle.dump(ep.tag_string_to_chuck, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    
+
+
+    
+    
+if __name__=="__main__":
+    main()

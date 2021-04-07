@@ -47,6 +47,12 @@ class Embedding_Processor:
             # """ 
             # Append the chunks in the 
             # """
+            '''
+            Assign index for the first subword in each tag. 
+            (The index is based on tokenization result.)
+            Use the index to extract embedding.
+            The reason using this index is to prevent having the same subword in a sentence.
+            '''
             start=1
             for ent in sentence:
                 ids = self.bert_model.tokenizer.encode(ent[0], add_special_tokens=False)
@@ -107,6 +113,7 @@ class Embedding_Processor:
 
                 else:
                     self.map_tag_to_embed[tag_type][tag_string] = [tags_emb]
+                    #remove tokenization index, make the format as ususal
                     for i in ent:
                         i.pop(-1)
                     self.tag_string_to_chuck[tag_type][tag_string]= ent

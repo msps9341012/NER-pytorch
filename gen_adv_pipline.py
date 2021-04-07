@@ -25,6 +25,7 @@ def add_args(parser):
     parser.add_option("--preprocess_set", default="",help="Location of preprocessed set")
     parser.add_option("--name", default="",help="filename for saving")
     parser.add_option("--save_dir", default="",help="directory for storing the generated data")
+    parser.add_option("--bert", action='store_true',help="using bert embedding")
     return parser
 
 
@@ -96,8 +97,7 @@ def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank):
     If the data has already been processed via different method, then modify on them.
     Or, generate n adv examples using this method.
     '''
-
-    word_bank = unpacked_data(word_bank)
+    
     wr = Word_Replacement(lower, word_to_id, word_embeds, word_bank)
     
 #     word_bank=unpacked_data(word_bank)
@@ -126,7 +126,7 @@ def using_para(dataset, n):
     Since this method may not be able to generate n adv examples, be sure to put it in the last order.
     '''
     counter=0
-    paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe',1000)
+    paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe',500)
     res=[]
     
     for sentence_pack in tqdm(dataset):
@@ -267,8 +267,18 @@ def main():
                 else:
                     print('used {}'.format(opts.dataset))
                     data_to_rep = dataset_map[opts.dataset]
+                
+                if opts.bert:
+                    path_map = {'train':'../tag_embed/train_bert', 'dev':'../tag_embed/dev_bert'}
+                    
+                    word_bank_path = path_map[opts.wordbank]
+                    
+                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, 'bert', word_bank_path)
+                else:
 
-                updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, word_embeds, dataset_map[opts.wordbank])
+                    word_bank = unpacked_data(dataset_map[opts.wordbank])
+                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, word_embeds, word_bank)
+                    
                 assert len(updated_data)==len(data_to_rep), 'error'
                 savefile(updated_data, opts, agg_name)
 

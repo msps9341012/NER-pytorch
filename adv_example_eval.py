@@ -232,7 +232,6 @@ else:
     for batch in adv_data:
         for example in batch:
             res.append(example)
-    breakpoint()
     adv_batched = prepare_dataset(res, word_to_id, char_to_id, tag_to_id, lower)
     adv_batched = generate_batch_data(adv_batched,1)
     

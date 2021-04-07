@@ -64,6 +64,8 @@ def add_non_adv_args(parser):
     parser.add_option("--launch_epoch", default='0',type='int', help='introducing paraphrases after certain epoch')
     parser.add_option("--per_adv", default='1',type='int', help='number of generated adv examples for one training sample ')
     parser.add_option("--adv_path", default="",help="Path to adv examples")
+    parser.add_option("--dynamic_inference", action='store_true' ,help="inference adv example before feed to the model ")
+    
     
     return parser
 
@@ -91,7 +93,6 @@ def get_args():
     optparser=add_model_args(optparser)
     optparser=add_non_adv_args(optparser)
     optparser=add_adv_args(optparser)
-    optparser=add_eval_args(optparser)
 
     
     opts = optparser.parse_args()[0]
@@ -127,6 +128,8 @@ def get_args():
     parameters['launch_epoch']=opts.launch_epoch
     parameters['per_adv']=opts.per_adv
     parameters['adv_path']=opts.adv_path
+    parameters['dynamic_inference']=opts.dynamic_inference
+
     
     
     parameters['use_gpu'] = opts.use_gpu == 1 and torch.cuda.is_available()

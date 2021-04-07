@@ -44,7 +44,7 @@ class CRF(nn.Module):
         features = self.fc(features)
         return self.__viterbi_decode(features, masks[:, :features.size(1)].float())
 
-    def loss(self, features, ys, masks):
+    def loss(self, features, ys, masks, avg=True):
         """negative log likelihood loss
         B: batch size, L: sequence length, D: dimension
         :param features: [B, L, D]
@@ -59,7 +59,9 @@ class CRF(nn.Module):
 
         forward_score = self.__forward_algorithm(features, masks_)
         gold_score = self.__score_sentence(features, ys[:, :L].long(), masks_)
-        loss = (forward_score - gold_score).mean()
+        loss = forward_score - gold_score
+        if avg:
+            loss = loss.mean()
         return loss
 
     def __score_sentence(self, features, tags, masks):

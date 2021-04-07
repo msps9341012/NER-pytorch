@@ -4,6 +4,7 @@
 from __future__ import print_function
 
 from comet_ml import Experiment
+from tqdm import tqdm
 #import optparse
 import itertools
 from collections import OrderedDict
@@ -31,7 +32,7 @@ t = time.time()
 
 opts, parameters=get_args()
 
-#experiment=None
+experiment=None
 
 experiment = Experiment(api_key='Bq7FWdV8LPx8HkWh67e5UmUPm',
                        project_name='NER',
@@ -232,6 +233,31 @@ def evaluating_batch(model, datas, best_F,display_confusion_matrix = False):
 
 
 
+
+
+def forward_step(model, data, avg=True):
+    sentence_in = Variable(torch.LongTensor(data['words']))
+    chars2_mask = Variable(torch.LongTensor(data['chars']))
+    caps = Variable(torch.LongTensor(data['caps']))
+    targets = torch.LongTensor(data['tags']) 
+    chars2_length = data['char_length']
+    word_length=data['word_length']
+
+
+    if use_gpu:
+        sentence_in = sentence_in.cuda()
+        targets     = targets.cuda()
+        chars2_mask = chars2_mask.cuda()
+        caps        = caps.cuda()
+
+    return model.loss(sentence = sentence_in, tags = targets, chars = chars2_mask, caps = caps, chars2_length = chars2_length, word_length=word_length, avg=avg)
+
+
+
+
+
+
+
 #random.shuffle(train_data)
 
 #     train_have_para=[]
@@ -247,7 +273,7 @@ def evaluating_batch(model, datas, best_F,display_confusion_matrix = False):
 #     para_batch = generate_batch_para(para_token_map,5)
 #     train_batched = train_have_para + train_left
 
-if parameters['non_gradient']:
+if parameters['non_gradient'] or parameters['dynamic_inference']:
     '''
     same logic as above
     '''
@@ -257,6 +283,7 @@ if parameters['non_gradient']:
             
     with open(parameters['adv_path'], 'rb') as handle:
         adv_data = pickle.load(handle)
+    
     
     assert len(train_data)==len(adv_data), 'different length'
     
@@ -270,24 +297,31 @@ if parameters['non_gradient']:
         train_have_adv=[]
         train_left=[]
         adv_examples=[]
+        indexed_data_all = []
         
         number_of_adv=parameters['per_adv']
+        print('processing adv data')
+        with tqdm(total=len(adv_data)) as pbar:
+            for index in range(len(adv_data)):
+                if len(adv_data[index]) != number_of_adv:
+                    train_left.append(train_data[index])
+
+                else:
+                    indexed_data = prepare_dataset(adv_data[index], word_to_id, char_to_id, tag_to_id, lower)
+
+                    indexed_data_all.append(indexed_data)
+
+                    adv_examples.append(generate_batch_data(indexed_data,number_of_adv)[0])
+                    train_have_adv.append(train_data[index])
+                
+                pbar.update(1)
         
-        for index in range(len(adv_data)):
-
-            if len(adv_data[index]) != number_of_adv:
-                train_left.append(train_data[index])
-
-            else:
-                indexed_data = prepare_dataset(adv_data[index], word_to_id, char_to_id, tag_to_id, lower)
-                adv_examples.append(generate_batch_data(indexed_data,number_of_adv)[0])
-                train_have_adv.append(train_data[index])
-
         train_have_adv = generate_batch_data(train_have_adv,5)
         train_left = generate_batch_data(train_left,5)
         train_batched = train_have_adv + train_left
         
         adv_batched = list(divide_chunks(adv_examples, 5))
+        indexed_data_batched = list(divide_chunks(indexed_data_all, 5))
     
         assert len(adv_batched)==len(train_have_adv), 'different batch length'
     
@@ -297,17 +331,31 @@ if parameters['non_gradient']:
     warmup_iter=parameters['warmup']*num_iters
     
     ratio_scheduler=WarmupWeight(start_lr=0.5, warmup_iter=warmup_iter, num_iters=num_iters,
-                              warmup_style=parameters['warmup_style'], last_iter=-1, alpha=parameters['exp_weight'])
-
-    
-    
+                              warmup_style=parameters['warmup_style'], last_iter=-1, alpha=parameters['exp_weight'])    
 else:
-    train_batched=generate_batch_data(train_data,5)
+    train_batched=generate_batch_data(train_data,64)
 
 dev_batched=generate_batch_data(dev_data,1)
 test_batched=generate_batch_data(test_data,1)
 
 best_dev_F, new_dev_F, save = evaluating_batch(model, dev_batched, 0)
+
+def inference_and_filter(model, adv_example, index, pos):
+    
+    data_bank = indexed_data_batched[index][pos]
+    with torch.no_grad():
+        loss = forward_step(model, adv_example, avg=False)
+        rank = torch.argsort(loss,descending=True)
+        sel_index = rank[rank<10]
+        sel_index = sel_index.cpu().detach().numpy()
+    
+    sel_example=[]
+    for i in sel_index:
+        sel_example.append(data_bank[i])
+    
+    return generate_batch_data(sel_example,10)[0]
+
+
 
 
 #To-do: combine para and rep together
@@ -330,25 +378,31 @@ for epoch in range(parameters['epochs']):
         model.zero_grad()
         #sentence_in, targets, chars2_mask, caps, chars2_length, matching_char= gen_input(data)
         
-        sentence_in=Variable(torch.LongTensor(data['words']))
-        chars2_mask=Variable(torch.LongTensor(data['chars']))
-        caps=Variable(torch.LongTensor(data['caps']))
-        targets = torch.LongTensor(data['tags']) 
-        chars2_length = data['char_length']
-        word_length=data['word_length']
-
-
-        if use_gpu:
-            sentence_in = sentence_in.cuda()
-            targets     = targets.cuda()
-            chars2_mask = chars2_mask.cuda()
-            caps        = caps.cuda()
-
-        neg_log_likelihood = model.loss(sentence = sentence_in, tags = targets, chars = chars2_mask, 
-                                        caps = caps, chars2_length = chars2_length, word_length=word_length)
-        
+        neg_log_likelihood = forward_step(model, data)
         
         neg_log_likelihood_adv=0
+        
+        if parameters['dynamic_inference']:
+            if index < len(adv_batched) and epoch >= parameters['launch_epoch']:
+                
+                ratio=ratio_scheduler.step()
+                adv_batch_input = adv_batched[index]
+                
+                count=0
+                for adv_example in adv_batch_input:
+                    sel_data = inference_and_filter(model, adv_example, index, count)
+                    
+                    neg_log_likelihood_adv += forward_step(model, sel_data)
+                    
+                    count=count+1
+                    
+                neg_log_likelihood_adv=neg_log_likelihood_adv/count
+                in_epoch_losses_adv.append(float(neg_log_likelihood_adv.cpu().detach().numpy()))
+
+
+            else:
+                ratio = 0.0
+        
         if parameters['non_gradient']:
             if index < len(adv_batched) and epoch >= parameters['launch_epoch']:
                 
@@ -359,27 +413,12 @@ for epoch in range(parameters['epochs']):
                 if parameters['per_adv']==1:
                     adv_batch_input=[adv_batch_input]
                 count=0
-                for adv_exmple in adv_batch_input:
-                    sentence_in_adv=Variable(torch.LongTensor(adv_exmple['words']))
-                    chars2_mask_adv=Variable(torch.LongTensor(adv_exmple['chars']))
-                    caps_adv=Variable(torch.LongTensor(adv_exmple['caps']))
-                    targets_adv = torch.LongTensor(adv_exmple['tags']) 
-                    chars2_length_adv = adv_exmple['char_length']
-                    word_length_adv=adv_exmple['word_length']
-                
-                    if use_gpu:
-                        sentence_in_adv = sentence_in_adv.cuda()
-                        targets_adv     = targets_adv.cuda()
-                        chars2_mask_adv = chars2_mask_adv.cuda()
-                        caps_adv        = caps_adv.cuda()
-                
-                    neg_log_likelihood_adv += model.loss(sentence = sentence_in_adv, 
-                                                         tags = targets_adv, 
-                                                         chars = chars2_mask_adv, 
-                                                         caps = caps_adv, 
-                                                         chars2_length = chars2_length_adv, 
-                                                         word_length=word_length_adv)
+
+                for adv_example in adv_batch_input:
+                    neg_log_likelihood_adv += forward_step(model, adv_example)
                     count=count+1
+                    
+                        
                 neg_log_likelihood_adv=neg_log_likelihood_adv/count
                 in_epoch_losses_adv.append(float(neg_log_likelihood_adv.cpu().detach().numpy()))
                 

@@ -1,7 +1,7 @@
 from __future__ import print_function
 
 import numpy as np
-
+from tqdm import tqdm
 import itertools
 import loader
 from utils import *
@@ -12,13 +12,21 @@ import pickle
 import copy
 import faiss
 
+import torch
+
+
+
 pool_method_ids = {"mean":0, "min":1, "max":2}
 tags_all = ['LOC', 'MISC', 'PER', 'ORG']
+
+
+            
 
 class Neighbor_finder:
     def __init__(self,view):
         self.view=view
-        self.index = faiss.index_factory(100, "Flat", faiss.METRIC_INNER_PRODUCT)
+        d=self.view.shape[-1]
+        self.index = faiss.index_factory(d, "Flat", faiss.METRIC_INNER_PRODUCT)
         faiss.normalize_L2(self.view)
         self.index.add(view)
         
@@ -36,16 +44,44 @@ class Word_Replacement():
         self.map_tag_to_chunks = {}
         self.word_to_id = word_to_id
         self.word_embeds = word_embeds
+                
         tags_all = ['LOC', 'MISC', 'PER', 'ORG']
         
         self.tokens_index_map={}
         self.tag_finder_map={}
+        self.tag_unique_set={}
         
         for tag in tags_all:
             self.map_tag_to_chunks[tag] = []
+            self.tag_unique_set[tag]=set()
         
-        for sentence in wordbank:
-            self.create_tag_chunks(sentence)
+            
+        if isinstance(self.word_embeds, str):
+            '''
+            if using bert embedding, reload the precomputed one 
+            so the wordbank is a path (will be specified in gen_adv_pipeline)
+            '''
+            
+            with open(wordbank, 'rb') as handle:
+                '''
+                tag_string->embedding vector
+                '''
+                emb_map = pickle.load(handle)
+                
+            with open(wordbank+'_chunck_map', 'rb') as handle:
+                '''
+                tag_string->chunk list format
+                '''
+                string_chunk_map = pickle.load(handle)
+            
+            #change format to unify the code, but it is redundant 
+            for tag_type in emb_map:
+                for tag_string in emb_map[tag_type]:
+                    self.map_tag_to_chunks[tag_type].append((string_chunk_map[tag_type][tag_string], emb_map[tag_type][tag_string]))
+            self.emb_map = emb_map
+        else:
+            for sentence in tqdm(wordbank):
+                self.create_tag_chunks(sentence)
         
         for tag in tags_all:
             self.tag_finder_map[tag] = self.transform_to_faiss(tag)
@@ -55,10 +91,21 @@ class Word_Replacement():
     def calculate_net_embedding_vector_for_chunk(self, chunk_to_replace, pool_method = "mean"):
         """
         """
-
+        
         def f(x): return x.lower() if self.lower else x
     
         str_words = [ent[0] for ent in chunk_to_replace]
+        
+        
+        if isinstance(self.word_embeds, str):
+            _ , tag_type = split_tag(chunk_to_replace[0][3])
+            tag_string = ' '.join(str_words).lower()
+            
+            #find embedding in the precomputed one 
+            
+            embedding = self.emb_map[tag_type][tag_string]
+            return embedding, tag_string
+        
         word_ids = [self.word_to_id[f(w) if f(w) in self.word_to_id else '<UNK>']
                      for w in str_words]
     
@@ -70,8 +117,9 @@ class Word_Replacement():
             embedding = np.max(np.array(all_distances),axis=0)
         else:
             embedding = np.mean(np.array(all_distances), axis=0)
-    
-        return embedding
+
+        
+        return embedding, " ".join(str_words).lower()
     
 
     def create_tag_chunks(self, sentence):
@@ -79,6 +127,12 @@ class Word_Replacement():
         # """ 
         # Append the chunks in the 
         # """
+        append_flag=0
+        if sentence[-1][-1]!='O':
+            sentence=sentence+[['.','_','_','O']]
+            append_flag=1
+        
+        
         prev_tag = 'O'
         start_tag = False
         end_tag = False
@@ -89,11 +143,13 @@ class Word_Replacement():
             end_tag = is_chunk_end(prev_tag, tag)
             if end_tag and len(current_chunk) > 0:
                 _ , tag_type = split_tag(current_chunk[-1][3])
-                chunk_embedding_min = self.calculate_net_embedding_vector_for_chunk(current_chunk, "min")
-                chunk_embedding_max = self.calculate_net_embedding_vector_for_chunk(current_chunk, "max")
-                chunk_embedding_mean = self.calculate_net_embedding_vector_for_chunk(current_chunk, "mean")
-    
-                self.map_tag_to_chunks[tag_type].append((current_chunk, chunk_embedding_mean, chunk_embedding_min, chunk_embedding_max))
+
+                chunk_embedding_min,str_words = self.calculate_net_embedding_vector_for_chunk(current_chunk, "min")
+                chunk_embedding_max, _ = self.calculate_net_embedding_vector_for_chunk(current_chunk, "max")
+                chunk_embedding_mean, _ = self.calculate_net_embedding_vector_for_chunk(current_chunk, "mean")
+                if str_words not in self.tag_unique_set[tag_type]:
+                    self.map_tag_to_chunks[tag_type].append((current_chunk, chunk_embedding_mean, chunk_embedding_min, chunk_embedding_max))
+                    self.tag_unique_set[tag_type].add(str_words)
                 current_chunk = []
                 start_tag = False
     
@@ -108,14 +164,18 @@ class Word_Replacement():
         possible_replacements = self.map_tag_to_chunks[tag_type] 
         
         self.tokens_index_map[tag_type] = [pr[0] for pr in possible_replacements]
+        finder_map={}
         
         mean_emb = copy.deepcopy(np.array([pr[1] for pr in possible_replacements],dtype='float32'))
-        min_emb= copy.deepcopy(np.array([pr[2] for pr in possible_replacements],dtype='float32'))
-        max_emb = copy.deepcopy(np.array([pr[3] for pr in possible_replacements],dtype='float32'))
-        finder_map={}
-        finder_map['min']=Neighbor_finder(min_emb)
-        finder_map['max']=Neighbor_finder(max_emb)
         finder_map['mean']=Neighbor_finder(mean_emb)
+        
+        if not isinstance(self.word_embeds, str):
+            min_emb= copy.deepcopy(np.array([pr[2] for pr in possible_replacements],dtype='float32'))
+            max_emb = copy.deepcopy(np.array([pr[3] for pr in possible_replacements],dtype='float32'))
+            finder_map['min']=Neighbor_finder(min_emb)
+            finder_map['max']=Neighbor_finder(max_emb)
+
+        
         return finder_map
         
 
@@ -125,9 +185,10 @@ class Word_Replacement():
     
         _, tag_type = split_tag(chunk_to_replace[0][3])
         
-        base_embedding = self.calculate_net_embedding_vector_for_chunk(chunk_to_replace,  pool_method)
+        base_embedding, _ = self.calculate_net_embedding_vector_for_chunk(chunk_to_replace,  pool_method)
         base_embedding = base_embedding.astype('float32')
         base_embedding = base_embedding / np.linalg.norm(base_embedding)
+        
         if replacement_method=='farthest':
             base_embedding = base_embedding*-1
         
@@ -136,6 +197,7 @@ class Word_Replacement():
         
         for index in nei_indexes[0]:
             top_replacements.append(self.tokens_index_map[tag_type][index])
+
         return top_replacements
         
         

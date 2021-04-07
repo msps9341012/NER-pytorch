@@ -101,7 +101,7 @@ class Paraphraser():
             assert len(para_w) == len(para_t), 'error'
             para_text=" ".join(para_w)
 
-            if para_text!=true_order and self.perplexity_score(para_text)<self.threshold:
+            if para_text!=true_order: #and self.perplexity_score(para_text)<self.threshold:
                 tmp=[]
                 for word, tag in zip(para_w, para_t):
                     tmp.append([word,'_','_',tag])

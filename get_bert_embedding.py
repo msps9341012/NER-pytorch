@@ -130,6 +130,16 @@ class Embedding_Processor:
 
     
 def main():
+    '''
+    The input format should follow the training/dev sentences.
+    [[[word,_,_,tag],...]]
+    
+    The output will be two dicts stored in two files.
+    1. tag_string (raw_text) -> embedding vector
+    2. tag_string (raw_text) -> chunk ([[word,..,tag],...]) 
+    
+    Have not added arguments for setting train/dev path, should change it manually.
+    '''
     
     
     
@@ -158,16 +168,13 @@ def main():
     if not os.path.exists('../tag_embed'):
         os.makedirs('../tag_embed')
     
+    '''
+    change path as well as filename here.
+    '''
     with open('../tag_embed/dev_bert', 'wb') as handle:
-        '''
-        tag_string->embedding vector
-        '''
         pickle.dump(map_tag_to_embed, handle, protocol=pickle.HIGHEST_PROTOCOL)
         
     with open('../tag_embed/dev_bert_chunck_map', 'wb') as handle:
-        '''
-        tag_string->chunk ([[word,..,tag],...])
-        '''
         pickle.dump(ep.tag_string_to_chuck, handle, protocol=pickle.HIGHEST_PROTOCOL)
     
 

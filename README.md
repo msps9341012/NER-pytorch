@@ -7,6 +7,16 @@
 ```
 
 
+
++ Get bert embedding for all tags.
+```
+python get_bert_embedding.py
+```
+It will generate two files that will be further used in the below pipeline.
+See more descriptions in the py file.
+Haven't added arguments for setting path and name, should change it manually.
+
+
 + Generate adv examples
 ```
 python gen_adv_pipline.py --pre_emb ../glove_emb/glove.6B.100d.txt --save_dir ../para_text/ --name 5_train --dataset train --order rep --n 5

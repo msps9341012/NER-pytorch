@@ -137,7 +137,6 @@ def get_args():
     
     
     parameters['use_gpu'] = opts.use_gpu == 1 and torch.cuda.is_available()
-
     
     check_args(opts,parameters)
     

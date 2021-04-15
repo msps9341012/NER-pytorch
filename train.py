@@ -26,6 +26,9 @@ from model import BiLSTM_CRF
 
 from arguments import get_args
 from processor import generate_batch_data, generate_batch_para, generate_batch_rep
+from pytorchtools import EarlyStopping
+
+
 
 
 t = time.time()
@@ -48,10 +51,14 @@ mapping_file = 'models/mapping.pkl'
 
 name = parameters['name']
 model_name = models_path + name #get_name(parameters)
-tmp_model = model_name + '.tmp'
+
 
 if not os.path.exists(models_path):
     os.makedirs(models_path)
+    
+
+early_stopping = EarlyStopping(patience=20, verbose=True, path=model_name)   
+
     
 lower = parameters['lower']
 zeros = parameters['zeros']
@@ -142,8 +149,9 @@ model = BiLSTM_CRF(vocab_size=len(word_to_id),
                    # cap_embedding_dim=10)
         
 if parameters['reload']:
-    print('loading model')
-    model.load_state_dict(torch.load(model_name))
+    print('loading model:', parameters['reload'])
+    model.load_state_dict(torch.load(models_path+parameters['reload']))
+
 if use_gpu:
     model.cuda()
 
@@ -156,7 +164,7 @@ best_train_F = -1.0
 all_F = [[0, 0, 0]]
 plot_every = 10
 eval_every = 20
-count = 0
+sample_count = 0
 
 best_idx=0
 
@@ -187,6 +195,9 @@ def evaluating_batch(model, datas, best_F,display_confusion_matrix = False):
 
     save = False
     new_F = 0.0
+    
+    loss=[]
+    
     confusion_matrix = torch.zeros((len(tag_to_id) - 2, len(tag_to_id) - 2))
     for data in datas:
         sentence_in=Variable(torch.LongTensor(data['words']))
@@ -195,8 +206,8 @@ def evaluating_batch(model, datas, best_F,display_confusion_matrix = False):
         targets = torch.LongTensor(data['tags']) 
         chars2_length = data['char_length']
         word_length=data['word_length']
-        ground_truth_id = data['tags'][0]
         
+
         if use_gpu:
             sentence_in = sentence_in.cuda()
             targets     = targets.cuda()
@@ -205,14 +216,23 @@ def evaluating_batch(model, datas, best_F,display_confusion_matrix = False):
         val, out = model(sentence= sentence_in, caps = caps,chars = chars2_mask, 
                          chars2_length= chars2_length,word_length=word_length)
         
-        predicted_id = out
         
-        for (true_id, pred_id) in zip(ground_truth_id, predicted_id[0]):
+        ground_truth_id = []
+        index=0
+        for length in data['word_length']:
+            ground_truth_id.append(data['tags'][index,:length])
+            index=index+1
+        
+        ground_truth_id = np.concatenate(ground_truth_id)
+        
+        predicted_id = np.concatenate(out)
+        
+        for (true_id, pred_id) in zip(ground_truth_id, predicted_id):
             true_tags.append(id_to_tag[true_id])
             pred_tags.append(id_to_tag[pred_id])
             confusion_matrix[true_id, pred_id] += 1
     prec, rec, new_F = evaluate(true_tags, pred_tags, verbose=False)
-
+    
     if new_F > best_F:
         best_F = new_F
         save = True
@@ -228,7 +248,6 @@ def evaluating_batch(model, datas, best_F,display_confusion_matrix = False):
                 *([confusion_matrix[i][j] for j in range(confusion_matrix.size(0))] +
                   ["%.3f" % (confusion_matrix[i][i] * 100. / max(1, confusion_matrix[i].sum()))])
             ))
-
     return best_F, new_F, save
 
 
@@ -288,10 +307,10 @@ if parameters['non_gradient'] or parameters['dynamic_inference']:
     assert len(train_data)==len(adv_data), 'different length'
     
     if parameters['per_adv']==1:
-        train_batched=generate_batch_data(train_data,5)
+        train_batched=generate_batch_data(train_data, parameters['batch_size'])
         adv_data = unpacked_data(adv_data)
         adv_data = prepare_dataset(adv_data, word_to_id, char_to_id, tag_to_id, lower)
-        adv_batched = generate_batch_data(adv_data,5)
+        adv_batched = generate_batch_data(adv_data, parameters['batch_size'])
         
     else:
         train_have_adv=[]
@@ -316,12 +335,13 @@ if parameters['non_gradient'] or parameters['dynamic_inference']:
                 
                 pbar.update(1)
         
-        train_have_adv = generate_batch_data(train_have_adv,5)
-        train_left = generate_batch_data(train_left,5)
+        train_have_adv = generate_batch_data(train_have_adv,parameters['batch_size'])
+        
+        train_left = generate_batch_data(train_left,parameters['batch_size'])
         train_batched = train_have_adv + train_left
         
-        adv_batched = list(divide_chunks(adv_examples, 5))
-        indexed_data_batched = list(divide_chunks(indexed_data_all, 5))
+        adv_batched = list(divide_chunks(adv_examples, parameters['batch_size']))
+        indexed_data_batched = list(divide_chunks(indexed_data_all, parameters['batch_size']))
     
         assert len(adv_batched)==len(train_have_adv), 'different batch length'
     
@@ -333,12 +353,15 @@ if parameters['non_gradient'] or parameters['dynamic_inference']:
     ratio_scheduler=WarmupWeight(start_lr=0.5, warmup_iter=warmup_iter, num_iters=num_iters,
                               warmup_style=parameters['warmup_style'], last_iter=-1, alpha=parameters['exp_weight'])    
 else:
-    train_batched=generate_batch_data(train_data,64)
+    train_batched=generate_batch_data(train_data, parameters['batch_size'])
 
-dev_batched=generate_batch_data(dev_data,1)
-test_batched=generate_batch_data(test_data,1)
 
-best_dev_F, new_dev_F, save = evaluating_batch(model, dev_batched, 0)
+    
+train_batched_ori=generate_batch_data(train_data,100)
+dev_batched=generate_batch_data(dev_data, 100)
+test_batched=generate_batch_data(test_data, 100)
+
+
 
 def inference_and_filter(model, adv_example, index, pos):
     
@@ -357,10 +380,10 @@ def inference_and_filter(model, adv_example, index, pos):
 
 
 
-
-#To-do: combine para and rep together
        
 metrics={}
+
+disable_flag=not parameters['early_stop']
 
 for epoch in range(parameters['epochs']):
     
@@ -368,7 +391,7 @@ for epoch in range(parameters['epochs']):
     in_epoch_losses_adv = []
     for i, index in enumerate(np.random.permutation(len(train_batched))):
         tr = time.time()
-        count += 1
+        sample_count += 1
 
         extracted_grads_char = []
         extracted_grads_word = []
@@ -443,28 +466,45 @@ for epoch in range(parameters['epochs']):
             #model.word_embeds.weight.data=normalize(word_freq_scale,model.word_embeds.weight.data)
     losses.append(np.mean(in_epoch_losses))
     
-    metrics['loss_norm']=np.mean(in_epoch_losses)
-    if epoch >= parameters['launch_epoch'] and parameters['non_gradient']:
-        metrics['loss_adv']=np.mean(in_epoch_losses_adv)
-    else:
-        metrics['loss_adv']=0
+#     metrics['loss_norm']=np.mean(in_epoch_losses)
+#     if epoch >= parameters['launch_epoch'] and parameters['non_gradient']:
+#         metrics['loss_adv']=np.mean(in_epoch_losses_adv)
+#     else:
+#         metrics['loss_adv']=0
     
     
     model.train(False)
+    
+    _, new_train_F, _ = evaluating_batch(model, train_batched_ori, 0)
+    
     best_dev_F, new_dev_F, save = evaluating_batch(model, dev_batched, best_dev_F)
     if save:
-        best_idx = epoch
         torch.save(model.state_dict(), model_name)
+        best_idx = epoch
+    
+    if not disable_flag:
+        if not early_stopping.early_stop:
+            early_stopping(-new_dev_F, model)
+        else:
+            print("Early stopping, now introduce adv examples")
+            parameters['launch_epoch']=epoch
+            disable_flag = 1 
+            sample_count = len(train_batched)
+
+    
+        
     best_test_F, new_test_F, _ = evaluating_batch(model, test_batched, best_test_F)
+    
 
     all_F.append([0.0, new_dev_F, new_test_F])
     
     
     sys.stdout.flush()
-    print('Epoch %d : valid/test/test_best : %.2f / %.2f / %.2f - %d'%(epoch, best_dev_F, new_test_F,best_test_F, best_idx))
+    print('Epoch %d : train/dev/test : %.2f / %.2f / %.2f - %d'%(epoch, new_train_F, new_dev_F, new_test_F, best_idx))
     model.train(True)
-    adjust_learning_rate(optimizer, lr=learning_rate/(1+0.05*count/len(train_data)))
+    adjust_learning_rate(optimizer, lr=learning_rate/(1+0.05*sample_count/len(train_data)))
     
+    metrics['new_train_F']=new_train_F
     metrics['new_test_F']=new_test_F
     metrics['new_dev_F']=new_dev_F
     

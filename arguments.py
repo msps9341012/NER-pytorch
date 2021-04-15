@@ -19,7 +19,7 @@ def add_load_args(parser):
     parser.add_option("-p", "--pre_emb", default="models/glove.6B.100d.txt",help="Location of pretrained embeddings")
     parser.add_option("-A", "--all_emb", default="1",type='int', help="Load all embeddings")
     
-    parser.add_option("-r", "--reload", default="0",type='int', help="Reload the last saved model")
+    parser.add_option("-r", "--reload", default="",type='string', help="Reload the saved model via name ")
     return parser
 
     
@@ -46,6 +46,8 @@ def add_model_args(parser):
     parser.add_option('--char_mode', choices=['CNN', 'LSTM'], default='CNN',help='char_CNN or char_LSTM')
 
     parser.add_option("--epochs", default='150',type='int', help='training epochs')
+    parser.add_option("--batch_size", default='64',type='int', help='training epochs')
+    parser.add_option("--early_stop", action='store_true',help='apply early stop')
     return parser
 
 
@@ -111,7 +113,7 @@ def get_args():
     parameters['cap_dim'] = opts.cap_dim
     parameters['crf'] = opts.crf == 1
     parameters['dropout'] = opts.dropout
-    parameters['reload'] = opts.reload == 1
+    parameters['reload'] = opts.reload
     parameters['name'] = opts.name
     parameters['char_mode'] = opts.char_mode
     parameters['epochs']=opts.epochs
@@ -129,6 +131,8 @@ def get_args():
     parameters['per_adv']=opts.per_adv
     parameters['adv_path']=opts.adv_path
     parameters['dynamic_inference']=opts.dynamic_inference
+    parameters['batch_size']=opts.batch_size
+    parameters['early_stop']=opts.early_stop
 
     
     

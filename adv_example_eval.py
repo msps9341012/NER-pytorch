@@ -126,7 +126,10 @@ model = BiLSTM_CRF(vocab_size=len(word_to_id),
         
 if parameters['reload']:
     print('loading model')
-    model.load_state_dict(torch.load(model_name))
+    checkpoint = torch.load(models_path+parameters['reload'])
+    #model.load_state_dict(checkpoint['state_dict'])
+    model.load_state_dict(checkpoint)
+    
 if use_gpu:
     model.cuda()
 
@@ -163,7 +166,7 @@ def evaluating_batch(model, datas):
     pred_tags_all=[]
     macro=[]
     for data in datas:
-        
+        print(data)
         true_tags = []
         pred_tags = []
         
@@ -201,7 +204,7 @@ def evaluating_batch(model, datas):
         if len(df)!=0:
             macro.append(sum(df['true']==df['pred'])/len(df))
         
-    
+        
     df_tags = pd.DataFrame({'true':true_tags_all,'pred':pred_tags_all})
     df_tags = df_tags[df_tags['true']!='O']
     
@@ -220,6 +223,8 @@ example_1=[[word,_,_,tag]...]
 
 with open(parameters['adv_path'], 'rb') as handle:
     adv_data = pickle.load(handle)
+
+       
 if parameters['per_adv']==1:
     adv_data = unpacked_data(adv_data)
     
@@ -234,9 +239,10 @@ else:
             res.append(example)
     adv_batched = prepare_dataset(res, word_to_id, char_to_id, tag_to_id, lower)
     adv_batched = generate_batch_data(adv_batched,1)
+
     
-    
-    
+
+breakpoint()
 model.eval()
 evaluating_batch(model, adv_batched)
 

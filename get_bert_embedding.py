@@ -107,7 +107,11 @@ class Embedding_Processor:
             for ent in words:
                 tag_string = self.convert_to_string(ent)
                 first_sub_word_index = ent[0][-1]
-                tags_emb = emb[first_sub_word_index]
+                if len(ent)==1:
+                    tags_emb = emb[first_sub_word_index]
+                else:
+                    tags_emb = emb[first_sub_word_index:first_sub_word_index+len(ent)].mean(axis=0)
+                
                 if tag_string in self.map_tag_to_embed[tag_type]:
                     self.map_tag_to_embed[tag_type][tag_string].append(tags_emb)
 
@@ -165,8 +169,7 @@ def main():
     update_tag_scheme(dev_sentences, tag_scheme)
     update_tag_scheme(test_sentences, tag_scheme)
 
-    
-    for i in tqdm(train_sentences):
+    for i in tqdm(dev_sentences):
         ep.create_tag_chunks(i)
     
     map_tag_to_embed = ep.pooling()
@@ -178,10 +181,10 @@ def main():
     '''
     change path as well as filename here.
     '''
-    with open('../tag_embed/train_bert', 'wb') as handle:
+    with open('../tag_embed/dev_bert_mean', 'wb') as handle:
         pickle.dump(map_tag_to_embed, handle, protocol=pickle.HIGHEST_PROTOCOL)
         
-    with open('../tag_embed/train_bert_chunck_map', 'wb') as handle:
+    with open('../tag_embed/dev_bert_mean_chunck_map', 'wb') as handle:
         pickle.dump(ep.tag_string_to_chuck, handle, protocol=pickle.HIGHEST_PROTOCOL)
     
 

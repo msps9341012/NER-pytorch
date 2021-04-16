@@ -9,6 +9,11 @@ from tqdm import tqdm
 import pickle
 from paraphrase_model import Paraphraser
 from ppdb import PPDB_Replacement
+import torch
+import sys
+import numpy as np
+from operator import itemgetter
+from perplexity_est import Perplexity_estimator
 
 lower = 1
 zeros = 0
@@ -76,6 +81,7 @@ def load_data(pre_emb):
     pretrained_word_list = set([line.rstrip().split()[0].strip() for line in codecs.open(pre_emb, 'r', 'utf-8') 
                             if len(pre_emb) > 0])
     
+    
     filter_ppdb_list=[]
     for i in pretrained_word_list:
         if re.match('[^\x00-\x7F]+', i):
@@ -126,7 +132,7 @@ def using_para(dataset, n):
     Since this method may not be able to generate n adv examples, be sure to put it in the last order.
     '''
     counter=0
-    paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe',500)
+    paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe',285)
     res=[]
     
     for sentence_pack in tqdm(dataset):
@@ -164,6 +170,53 @@ def using_ppdb(dataset,n, word_map):
     return res
 
 
+def convert_to_string(ent):
+    string_list = [i[0] for i in ent]
+    string_list = " ".join(string_list).lower()
+    string_list = re.sub(r' ([^A-Za-z0-9])', r'\1', string_list)
+    return string_list
+    
+
+def divide_chunks(l, n):
+    for i in range(0, len(l), n): 
+        yield l[i:i + n]
+    
+           
+    
+def filter_examples(sentence,adv_examples, n):
+    print('filtering by perplexity score...')
+    count=0
+    filter_examples=[]
+    sentence = unpacked_data(sentence)
+    for sent, adv_list in tqdm(zip(sentence, adv_examples), total=len(sentence)):
+        
+        true_score = perplexity_filter.get_perplexity_score([convert_to_string(sent)],use_batch=False)[0]
+        #perplexity_filter.perplexity_score(convert_to_string(sent))
+        adv_string_list = list(map(convert_to_string, adv_list))
+        
+        
+        #split into batch to prevent memory issue
+        adv_string_batched = list(divide_chunks(adv_string_list, 20))
+        
+        score_list =[]
+        for batch in adv_string_batched:
+            score_list.append(perplexity_filter.get_perplexity_score(batch,use_batch=True))
+        
+        score_list = np.concatenate(score_list)
+        
+        sel_index = np.where(score_list<3*true_score)[0].tolist()
+        
+        sel_index = sel_index[:n]
+        if len(sel_index)!=n:
+            count=count+1
+            filter_examples.append(adv_list[:n])
+        else:
+            filter_examples.append(list(itemgetter(*sel_index)(adv_list)))
+    
+    print('Fail to meet the threshold :',count)
+        
+    return filter_examples
+
 
 
 def savefile(adv_data, opts, method):
@@ -179,6 +232,7 @@ def load_preprocessed(path):
     
 
 def main():
+            
     optparser = optparse.OptionParser()
     
     optparser = add_args(optparser)
@@ -230,8 +284,9 @@ def main():
                     print('used {}'.format(opts.dataset))
                     data_to_ppdb = dataset_map[opts.dataset]
 
-                updated_data = using_ppdb(data_to_ppdb, number_to_generate, filter_ppdb_list)
+                updated_data = using_ppdb(data_to_ppdb, 100, filter_ppdb_list)
                 assert len(updated_data)==len(data_to_ppdb), 'error'
+                
                 savefile(updated_data, opts, agg_name)
             print('ppdb finished')
         
@@ -248,7 +303,7 @@ def main():
                     print('used {}'.format(opts.dataset))
                     data_to_para = dataset_map[opts.dataset]
                     
-                updated_data = using_para(data_to_para, number_to_generate)
+                updated_data = using_para(data_to_para, 100)
                 assert len(updated_data)==len(data_to_para), 'error'
                 savefile(updated_data, opts, agg_name)
             print('para finished')
@@ -269,17 +324,20 @@ def main():
                     data_to_rep = dataset_map[opts.dataset]
                 
                 if opts.bert:
-                    path_map = {'train':'../tag_embed/train_bert', 'dev':'../tag_embed/dev_bert'}
+                    path_map = {'train':'../tag_embed/train_bert_mean', 'dev':'../tag_embed/dev_bert_mean'}
                     
                     word_bank_path = path_map[opts.wordbank]
                     
-                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, 'bert', word_bank_path)
+                    updated_data = using_word_rep(data_to_rep, 100,  word_to_id, 'bert', word_bank_path)
                 else:
 
                     word_bank = unpacked_data(dataset_map[opts.wordbank])
-                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, word_embeds, word_bank)
+                    updated_data = using_word_rep(data_to_rep, 100,  word_to_id, word_embeds, word_bank)
                     
                 assert len(updated_data)==len(data_to_rep), 'error'
+                
+                updated_data = filter_examples(dataset_map[opts.dataset],updated_data, number_to_generate)
+                breakpoint()
                 savefile(updated_data, opts, agg_name)
 
             print('rep finished')
@@ -288,6 +346,8 @@ def main():
 
 
 if __name__=="__main__":
+    
+    perplexity_filter = Perplexity_estimator()    
     main()
 
 

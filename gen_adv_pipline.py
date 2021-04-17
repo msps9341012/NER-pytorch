@@ -31,6 +31,12 @@ def add_args(parser):
     parser.add_option("--name", default="",help="filename for saving")
     parser.add_option("--save_dir", default="",help="directory for storing the generated data")
     parser.add_option("--bert", action='store_true',help="using bert embedding")
+    parser.add_option("--bert_pooler", default="mean",help="which bert pooling method")
+    parser.add_option("--filter", action='store_true',help="apply perplexity filter or not")
+    #To-do: add random and normal sampling
+    parser.add_option("--rep_with", default="farthest",help="replace with closest|farthest embedding ")
+    
+    
     return parser
 
 
@@ -98,7 +104,7 @@ def load_data(pre_emb):
     
     return train_sentences_packed, dev_sentences_packed, test_sentences_packed, word_embeds, word_to_id, filter_ppdb_list
 
-def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank):
+def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank, rep_method):
     '''
     If the data has already been processed via different method, then modify on them.
     Or, generate n adv examples using this method.
@@ -118,10 +124,10 @@ def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank):
         if len(sentence_pack)==n:
             adv_example=[]
             for sentence in sentence_pack:
-                adversarial_examples = wr.create_adv_examples(sentence, 1, "mean", "farthest")
+                adversarial_examples = wr.create_adv_examples(sentence, 1, "mean", rep_method)
                 adv_example = adv_example + adversarial_examples
         else:
-            adv_example = wr.create_adv_examples(sentence_pack[0], n, "mean", "farthest")
+            adv_example = wr.create_adv_examples(sentence_pack[0], n, "mean", rep_method)
 
         all_adversarial_examples_farthest.append(adv_example)
     return all_adversarial_examples_farthest
@@ -237,7 +243,9 @@ def main():
     
     optparser = add_args(optparser)
     opts = optparser.parse_args()[0]
+    
     number_to_generate = opts.n
+    
     method_to_path={}
     pipeline_order = opts.order.split(',')
     if opts.preprocess_set:
@@ -252,6 +260,11 @@ def main():
     adv_by_para = None
     adv_by_ppdb = None
     adv_by_rep  = None
+    
+    if opts.filter:
+        global_gen_number = 100
+    else:
+        global_gen_number = number_to_generate
     
     '''
     The data is packed 
@@ -268,8 +281,11 @@ def main():
     entry_data  = None
     updated_data = None
     agg_name = ""
+    
     for method in pipeline_order:
+        
         agg_name = agg_name + method + "_"
+        
         if method=='ppdb':
             print('generate adv-examples via ppdb')
         
@@ -284,7 +300,7 @@ def main():
                     print('used {}'.format(opts.dataset))
                     data_to_ppdb = dataset_map[opts.dataset]
 
-                updated_data = using_ppdb(data_to_ppdb, 100, filter_ppdb_list)
+                updated_data = using_ppdb(data_to_ppdb, global_gen_number, filter_ppdb_list)
                 assert len(updated_data)==len(data_to_ppdb), 'error'
                 
                 savefile(updated_data, opts, agg_name)
@@ -303,7 +319,7 @@ def main():
                     print('used {}'.format(opts.dataset))
                     data_to_para = dataset_map[opts.dataset]
                     
-                updated_data = using_para(data_to_para, 100)
+                updated_data = using_para(data_to_para, global_gen_number)
                 assert len(updated_data)==len(data_to_para), 'error'
                 savefile(updated_data, opts, agg_name)
             print('para finished')
@@ -324,20 +340,23 @@ def main():
                     data_to_rep = dataset_map[opts.dataset]
                 
                 if opts.bert:
-                    path_map = {'train':'../tag_embed/train_bert_mean', 'dev':'../tag_embed/dev_bert_mean'}
+                    path_map = {'train':'../tag_embed/train_bert_{}'.format(opts.bert_pooler), 
+                                'dev':'../tag_embed/dev_bert_{}'.format(opts.bert_pooler)}
                     
                     word_bank_path = path_map[opts.wordbank]
                     
-                    updated_data = using_word_rep(data_to_rep, 100,  word_to_id, 'bert', word_bank_path)
+                    updated_data = using_word_rep(data_to_rep, global_gen_number,  
+                                                  word_to_id, 'bert', word_bank_path, opts.rep_with)
                 else:
-
                     word_bank = unpacked_data(dataset_map[opts.wordbank])
-                    updated_data = using_word_rep(data_to_rep, 100,  word_to_id, word_embeds, word_bank)
+                    updated_data = using_word_rep(data_to_rep, global_gen_number,  
+                                                  word_to_id, word_embeds, word_bank, opts.rep_with)
                     
                 assert len(updated_data)==len(data_to_rep), 'error'
                 
-                updated_data = filter_examples(dataset_map[opts.dataset],updated_data, number_to_generate)
-                breakpoint()
+                if opts.filter:
+                    updated_data = filter_examples(dataset_map[opts.dataset],updated_data, number_to_generate)
+                
                 savefile(updated_data, opts, agg_name)
 
             print('rep finished')

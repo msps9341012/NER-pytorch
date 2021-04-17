@@ -166,7 +166,6 @@ def evaluating_batch(model, datas):
     pred_tags_all=[]
     macro=[]
     for data in datas:
-        print(data)
         true_tags = []
         pred_tags = []
         
@@ -223,7 +222,6 @@ example_1=[[word,_,_,tag]...]
 
 with open(parameters['adv_path'], 'rb') as handle:
     adv_data = pickle.load(handle)
-
        
 if parameters['per_adv']==1:
     adv_data = unpacked_data(adv_data)
@@ -242,7 +240,6 @@ else:
 
     
 
-breakpoint()
 model.eval()
 evaluating_batch(model, adv_batched)
 

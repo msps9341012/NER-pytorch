@@ -193,8 +193,13 @@ class Word_Replacement():
             base_embedding = base_embedding*-1
         
         finder = self.tag_finder_map[tag_type][pool_method]
-        distance, nei_indexes = finder.get_neighbor(base_embedding, max_replacements)
-        
+
+        if max_replacements==1 and replacement_method=='closest':
+            #the closest will be the tag itself, so drop it
+            distance, nei_indexes = finder.get_neighbor(base_embedding, 2)
+            nei_indexes = np.array(nei_indexes[0,1]).reshape(-1,1)
+        else:
+            distance, nei_indexes = finder.get_neighbor(base_embedding, max_replacements)
         for index in nei_indexes[0]:
             top_replacements.append(self.tokens_index_map[tag_type][index])
 

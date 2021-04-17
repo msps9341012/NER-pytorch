@@ -308,7 +308,6 @@ if parameters['non_gradient'] or parameters['dynamic_inference']:
     with open(parameters['adv_path'], 'rb') as handle:
         adv_data = pickle.load(handle)
     
-    
     assert len(train_data)==len(adv_data), 'different length'
     
     if parameters['per_adv']==1:

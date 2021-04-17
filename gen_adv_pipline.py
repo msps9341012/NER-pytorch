@@ -214,10 +214,12 @@ def filter_examples(sentence,adv_examples, n):
         
         sel_index = sel_index[:n]
         if len(sel_index)!=n:
+            left_choice= list(set(list(range(100)))-set(sel_index))
+            sel_index = sel_index + left_choice[:10-len(sel_index)]
             count=count+1
-            filter_examples.append(adv_list[:n])
-        else:
-            filter_examples.append(list(itemgetter(*sel_index)(adv_list)))
+        
+        assert len(sel_index)==n, 'filter error'
+        filter_examples.append(list(itemgetter(*sel_index)(adv_list)))
     
     print('Fail to meet the threshold :',count)
         
@@ -356,6 +358,7 @@ def main():
                 
                 if opts.filter:
                     updated_data = filter_examples(dataset_map[opts.dataset],updated_data, number_to_generate)
+                    global_gen_number = number_to_generate #reset the value for the following process
                 
                 savefile(updated_data, opts, agg_name)
 

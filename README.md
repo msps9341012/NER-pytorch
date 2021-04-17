@@ -21,7 +21,7 @@ It will generate two files that will be further used in the generating pipeline.
 ```
 python gen_adv_pipline.py --pre_emb ../glove_emb/glove.6B.100d.txt --save_dir ../para_text/ --name 5_train --dataset train --order rep --rep_with farthest --n 5 --filter 
 ```
-This command will ouptut a file named '5_train_rep', which applies the perplexity filter and replace with farthest embedding. 
+This command will ouptut a file named '5_train_rep', which applies the perplexity filter and replace with farthest embedding. \
 If using bert embedding, add '--bert' and also '--bert_pooler pooling_method' (the one that you used in the above command.) \
 As for '--order', you can set something like '--order rep,ppdb,para' to generate sequentially. \
 If you want to used the preprocessed data that stored in your local space, see the description of '--preprocess_set'.

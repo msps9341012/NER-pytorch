@@ -36,13 +36,13 @@ t = time.time()
 opts, parameters=get_args()
 
 experiment=None
-
+'''
 experiment = Experiment(api_key='Bq7FWdV8LPx8HkWh67e5UmUPm',
                        project_name='NER',
                        auto_param_logging=False, auto_metric_logging=False)
 
 experiment.log_parameters(parameters)
-
+'''
 
 models_path = "models/"
 use_gpu = parameters['use_gpu']
@@ -75,6 +75,7 @@ update_tag_scheme(test_sentences, tag_scheme)
 update_tag_scheme(test_train_sentences, tag_scheme)
 
 dico_words_train = word_mapping(train_sentences, lower)[0]
+
 
 dico_words, word_to_id, id_to_word = augment_with_pretrained(
         dico_words_train.copy(),
@@ -147,10 +148,7 @@ model = BiLSTM_CRF(vocab_size=len(word_to_id),
                    alpha=parameters['alpha'])
                    # n_cap=4,
                    # cap_embedding_dim=10)
-        
-if parameters['reload']:
-    print('loading model:', parameters['reload'])
-    model.load_state_dict(torch.load(models_path+parameters['reload']))
+
 
 if use_gpu:
     model.cuda()
@@ -167,6 +165,16 @@ eval_every = 20
 sample_count = 0
 
 best_idx=0
+
+
+        
+if parameters['reload']:
+    print('loading model:', parameters['reload'])
+    checkpoint = torch.load(models_path+parameters['reload'])
+    #model.load_state_dict(checkpoint)
+    model.load_state_dict(checkpoint['state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer'])
+    adjust_learning_rate(optimizer, lr=learning_rate)
 
 
 sys.stdout.flush()
@@ -293,9 +301,6 @@ def forward_step(model, data, avg=True):
 #     train_batched = train_have_para + train_left
 
 if parameters['non_gradient'] or parameters['dynamic_inference']:
-    '''
-    same logic as above
-    '''
     def divide_chunks(l, n):
         for i in range(0, len(l), n): 
             yield l[i:i + n]
@@ -364,19 +369,20 @@ test_batched=generate_batch_data(test_data, 100)
 
 
 def inference_and_filter(model, adv_example, index, pos):
-    
     data_bank = indexed_data_batched[index][pos]
     with torch.no_grad():
         loss = forward_step(model, adv_example, avg=False)
         rank = torch.argsort(loss,descending=True)
-        sel_index = rank[rank<10]
+        sel_index = rank[rank<5]
         sel_index = sel_index.cpu().detach().numpy()
     
     sel_example=[]
     for i in sel_index:
         sel_example.append(data_bank[i])
     
-    return generate_batch_data(sel_example,10)[0]
+    return generate_batch_data(sel_example,5)[0]
+
+
 
 
 
@@ -478,18 +484,21 @@ for epoch in range(parameters['epochs']):
     _, new_train_F, _ = evaluating_batch(model, train_batched_ori, 0)
     
     best_dev_F, new_dev_F, save = evaluating_batch(model, dev_batched, best_dev_F)
-    if save:
-        torch.save(model.state_dict(), model_name)
-        best_idx = epoch
+
     
     if not disable_flag:
         if not early_stopping.early_stop:
-            early_stopping(-new_dev_F, model)
+            early_stopping(-new_dev_F, model, optimizer)
         else:
             print("Early stopping, now introduce adv examples")
             parameters['launch_epoch']=epoch
             disable_flag = 1 
             sample_count = len(train_batched)
+            
+    else:
+        if save:
+            torch.save(model.state_dict(), model_name)
+            best_idx = epoch
 
     
         
@@ -503,14 +512,14 @@ for epoch in range(parameters['epochs']):
     print('Epoch %d : train/dev/test : %.2f / %.2f / %.2f - %d'%(epoch, new_train_F, new_dev_F, new_test_F, best_idx))
     model.train(True)
     adjust_learning_rate(optimizer, lr=learning_rate/(1+0.05*sample_count/len(train_data)))
-    
+    '''
     metrics['new_train_F']=new_train_F
     metrics['new_test_F']=new_test_F
     metrics['new_dev_F']=new_dev_F
     
     experiment.log_metrics(metrics)
     experiment.set_step(epoch+1)
-    
+    '''
     
 
 

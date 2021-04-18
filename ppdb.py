@@ -68,7 +68,7 @@ class PPDB_Replacement():
                 continue
             entailment = item.split('|||')[-1].strip()
 
-            if entailment == 'Equivalence' or entailment =='ForwardEntailment':
+            if entailment == 'Equivalence':
                 add_to_dict_of_set(phrase, paraphrase, phrase2paraphrase)
                 add_to_dict_of_set(paraphrase, phrase, phrase2paraphrase)
 

@@ -9,6 +9,11 @@ from tqdm import tqdm
 import pickle
 from paraphrase_model import Paraphraser
 from ppdb import PPDB_Replacement
+import torch
+import sys
+import numpy as np
+from operator import itemgetter
+from perplexity_est import Perplexity_estimator
 
 lower = 1
 zeros = 0
@@ -28,6 +33,12 @@ def add_args(parser):
     parser.add_option("--bert", action='store_true',help="using bert embedding")
     parser.add_option("--append_yago", action='store_true',help="append yago words in replacements")
 
+    parser.add_option("--bert_pooler", default="mean",help="which bert pooling method")
+    parser.add_option("--filter", action='store_true',help="apply perplexity filter or not")
+    #To-do: add random and normal sampling
+    parser.add_option("--rep_with", default="farthest",help="replace with closest|farthest embedding ")
+    
+    
     return parser
 
 
@@ -78,6 +89,7 @@ def load_data(pre_emb):
     pretrained_word_list = set([line.rstrip().split()[0].strip() for line in codecs.open(pre_emb, 'r', 'utf-8') 
                             if len(pre_emb) > 0])
     
+    
     filter_ppdb_list=[]
     for i in pretrained_word_list:
         if re.match('[^\x00-\x7F]+', i):
@@ -94,17 +106,17 @@ def load_data(pre_emb):
     
     return train_sentences_packed, dev_sentences_packed, test_sentences_packed, word_embeds, word_to_id, filter_ppdb_list
 
-def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank, append_yago):
+def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank, rep_method, append_yago = False):
     '''
     If the data has already been processed via different method, then modify on them.
     Or, generate n adv examples using this method.
     '''
 
-    
-    # if append_yago:
-    #     word_bank_yago = ret_yago_word_bank()
-    #     word_bank.extend(word_bank_yago)
 
+    if append_yago and not isinstance(word_bank, str):
+        with open('../YagoReplacement/yago_wb.pkl', 'rb') as handle:
+            word_bank_yago = pickle.load(handle)
+        word_bank.extend(word_bank_yago)
 
     wr = Word_Replacement(lower, word_to_id, word_embeds, word_bank)
     
@@ -112,7 +124,7 @@ def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank, append_yago):
 #     for sentence in word_bank:
 #         wr.create_tag_chunks(sentence)
 
-    print("Generating Closest Adversarial Examples")
+    print("Generating {} Adversarial Examples".format(rep_method))
     all_adversarial_examples_farthest = []
 
     print("Dataset Len : {}".format(len(dataset)))
@@ -120,10 +132,10 @@ def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank, append_yago):
         if len(sentence_pack)==n:
             adv_example=[]
             for sentence in sentence_pack:
-                adversarial_examples = wr.create_adv_examples(sentence, 1, "mean", "farthest")
+                adversarial_examples = wr.create_adv_examples(sentence, 1, "mean", rep_method)
                 adv_example = adv_example + adversarial_examples
         else:
-            adv_example = wr.create_adv_examples(sentence_pack[0], n, "mean", "farthest")
+            adv_example = wr.create_adv_examples(sentence_pack[0], n, "mean", rep_method)
 
         all_adversarial_examples_farthest.append(adv_example)
     return all_adversarial_examples_farthest
@@ -134,7 +146,7 @@ def using_para(dataset, n):
     Since this method may not be able to generate n adv examples, be sure to put it in the last order.
     '''
     counter=0
-    paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe',500)
+    paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe',285)
     res=[]
     
     for sentence_pack in tqdm(dataset):
@@ -172,6 +184,53 @@ def using_ppdb(dataset,n, word_map):
     return res
 
 
+def convert_to_string(ent):
+    string_list = [i[0] for i in ent]
+    string_list = " ".join(string_list).lower()
+    string_list = re.sub(r' ([^A-Za-z0-9])', r'\1', string_list)
+    return string_list
+    
+
+def divide_chunks(l, n):
+    for i in range(0, len(l), n): 
+        yield l[i:i + n]
+    
+           
+    
+def filter_examples(sentence,adv_examples, n):
+    print('filtering by perplexity score...')
+    count=0
+    filter_examples=[]
+    sentence = unpacked_data(sentence)
+    for sent, adv_list in tqdm(zip(sentence, adv_examples), total=len(sentence)):
+        
+        true_score = perplexity_filter.get_perplexity_score([convert_to_string(sent)],use_batch=False)[0]
+        #perplexity_filter.perplexity_score(convert_to_string(sent))
+        adv_string_list = list(map(convert_to_string, adv_list))
+        
+        
+        #split into batch to prevent memory issue
+        adv_string_batched = list(divide_chunks(adv_string_list, 20))
+        
+        score_list =[]
+        for batch in adv_string_batched:
+            score_list.append(perplexity_filter.get_perplexity_score(batch,use_batch=True))
+        
+        score_list = np.concatenate(score_list)
+        
+        sel_index = np.where(score_list<3*true_score)[0].tolist()
+        
+        sel_index = sel_index[:n]
+        if len(sel_index)!=n:
+            count=count+1
+            filter_examples.append(adv_list[:n])
+        else:
+            filter_examples.append(list(itemgetter(*sel_index)(adv_list)))
+    
+    print('Fail to meet the threshold :',count)
+        
+    return filter_examples
+
 
 
 def savefile(adv_data, opts, method):
@@ -187,11 +246,14 @@ def load_preprocessed(path):
     
 
 def main():
+            
     optparser = optparse.OptionParser()
     
     optparser = add_args(optparser)
     opts = optparser.parse_args()[0]
+    
     number_to_generate = opts.n
+    
     method_to_path={}
     pipeline_order = opts.order.split(',')
 
@@ -209,6 +271,11 @@ def main():
     adv_by_ppdb = None
     adv_by_rep  = None
     
+    if opts.filter:
+        global_gen_number = 100
+    else:
+        global_gen_number = number_to_generate
+    
     '''
     The data is packed 
     format is like [[example_1]]
@@ -225,8 +292,11 @@ def main():
     entry_data  = None
     updated_data = None
     agg_name = ""
+    
     for method in pipeline_order:
+        
         agg_name = agg_name + method + "_"
+        
         if method=='ppdb':
             print('generate adv-examples via ppdb')
         
@@ -241,8 +311,9 @@ def main():
                     print('used {}'.format(opts.dataset))
                     data_to_ppdb = dataset_map[opts.dataset]
 
-                updated_data = using_ppdb(data_to_ppdb, number_to_generate, filter_ppdb_list)
+                updated_data = using_ppdb(data_to_ppdb, global_gen_number, filter_ppdb_list)
                 assert len(updated_data)==len(data_to_ppdb), 'error'
+                
                 savefile(updated_data, opts, agg_name)
             print('ppdb finished')
         
@@ -259,7 +330,7 @@ def main():
                     print('used {}'.format(opts.dataset))
                     data_to_para = dataset_map[opts.dataset]
                     
-                updated_data = using_para(data_to_para, number_to_generate)
+                updated_data = using_para(data_to_para, global_gen_number)
                 assert len(updated_data)==len(data_to_para), 'error'
                 savefile(updated_data, opts, agg_name)
             print('para finished')
@@ -279,19 +350,33 @@ def main():
                     print('used {}'.format(opts.dataset))
                     data_to_rep = dataset_map[opts.dataset]
                 
+                import pdb
+                pdb.set_trace()
                 if opts.bert:
-                    path_map = {'train':'../tag_embed/train_bert', 'dev':'../tag_embed/dev_bert', 
-                               'dev_yago':'../tag_embed/dev_yago_bert'}
-                    
-                    word_bank_path = path_map[opts.wordbank]
-                    
-                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, 'bert', word_bank_path, append_yago = append_yago )
-                else:
+   
 
+                    path_map = {'train':'../tag_embed/train_bert_{}'.format(opts.bert_pooler), 
+                                'dev':'../tag_embed/dev_bert_{}'.format(opts.bert_pooler),
+                                'dev_yago':'../tag_embed/dev_yago_bert',
+                                'train_yago':'../tag_embed/train_yago_bert'}
+                    
+                    if append_yago:
+                        word_bank_key = opts.wordbank + "_yago"
+                    
+                    word_bank_path = path_map[word_bank_key]
+                    
+                    updated_data = using_word_rep(data_to_rep, global_gen_number,  
+                                                  word_to_id, 'bert', word_bank_path, opts.rep_with, opts.append_yago)
+                else:
                     word_bank = unpacked_data(dataset_map[opts.wordbank])
-                    updated_data = using_word_rep(data_to_rep, number_to_generate,  word_to_id, word_embeds, word_bank, append_yago = append_yago)
+                    updated_data = using_word_rep(data_to_rep, global_gen_number,  
+                                                  word_to_id, word_embeds, word_bank, opts.rep_with, opts.append_yago)
                     
                 assert len(updated_data)==len(data_to_rep), 'error'
+                
+                if opts.filter:
+                    updated_data = filter_examples(dataset_map[opts.dataset],updated_data, number_to_generate)
+                
                 savefile(updated_data, opts, agg_name)
 
             print('rep finished')
@@ -300,6 +385,8 @@ def main():
 
 
 if __name__=="__main__":
+    
+    perplexity_filter = Perplexity_estimator()    
     main()
 
 

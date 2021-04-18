@@ -14,6 +14,8 @@ import faiss
 from collections import defaultdict
 import torch
 from transformers import BertModel, BertTokenizer
+import sys
+
 
 
 pool_method_ids = {"mean":0, "min":1, "max":2}
@@ -35,11 +37,12 @@ class Bert:
 
     
 class Embedding_Processor:
-    def __init__(self):
+    def __init__(self, pooling_method):
         self.bert_model = Bert()
         self.map_tag_to_embed = defaultdict(dict)
         self.tag_string_to_chuck=defaultdict(dict)
-
+        self.pooling_method = pooling_method 
+    
         
      
     def create_tag_chunks(self, sentence):
@@ -107,7 +110,16 @@ class Embedding_Processor:
             for ent in words:
                 tag_string = self.convert_to_string(ent)
                 first_sub_word_index = ent[0][-1]
-                tags_emb = emb[first_sub_word_index]
+                if len(ent)==1:
+                    tags_emb = emb[first_sub_word_index]
+                else:
+                    if self.pooling_method=='max':
+                        tags_emb = emb[first_sub_word_index:first_sub_word_index+len(ent)].max(axis=0)
+                    elif self.pooling_method=='mean':
+                         tags_emb = emb[first_sub_word_index:first_sub_word_index+len(ent)].mean(axis=0)
+                    else:
+                        tags_emb = emb[first_sub_word_index]
+                
                 if tag_string in self.map_tag_to_embed[tag_type]:
                     self.map_tag_to_embed[tag_type][tag_string].append(tags_emb)
 
@@ -145,12 +157,12 @@ def main():
     1. tag_string (raw_text) -> embedding vector
     2. tag_string (raw_text) -> chunk ([[word,..,tag],...]) 
     
-    Have not added arguments for setting train/dev path, should change it manually.
     '''
     
+    dataset = sys.argv[1]
+    pooling_method = sys.argv[2]
     
-    
-    ep = Embedding_Processor()
+    ep = Embedding_Processor(pooling_method)
     
     lower = 1
     zeros = 0
@@ -164,24 +176,26 @@ def main():
     update_tag_scheme(train_sentences, tag_scheme)
     update_tag_scheme(dev_sentences, tag_scheme)
     update_tag_scheme(test_sentences, tag_scheme)
-
     
-    for i in tqdm(train_sentences):
+    dataset_map={'train':train_sentences, 'dev':dev_sentences, 'test':test_sentences}
+    
+    print('Get bert embedding for {} using {}'.format(dataset,pooling_method))
+    for i in tqdm(dataset_map[dataset]):
         ep.create_tag_chunks(i)
     
+    #average same tags
     map_tag_to_embed = ep.pooling()
 
     
     if not os.path.exists('../tag_embed'):
         os.makedirs('../tag_embed')
+        
     
-    '''
-    change path as well as filename here.
-    '''
-    with open('../tag_embed/train_bert', 'wb') as handle:
+    
+    with open('../tag_embed/{}_bert_{}'.format(dataset,pooling_method), 'wb') as handle:
         pickle.dump(map_tag_to_embed, handle, protocol=pickle.HIGHEST_PROTOCOL)
         
-    with open('../tag_embed/train_bert_chunck_map', 'wb') as handle:
+    with open('../tag_embed/{}_bert_{}_chunck_map'.format(dataset,pooling_method), 'wb') as handle:
         pickle.dump(ep.tag_string_to_chuck, handle, protocol=pickle.HIGHEST_PROTOCOL)
     
 

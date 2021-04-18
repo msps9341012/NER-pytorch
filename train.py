@@ -307,9 +307,9 @@ if parameters['non_gradient'] or parameters['dynamic_inference']:
             
     with open(parameters['adv_path'], 'rb') as handle:
         adv_data = pickle.load(handle)
-    
-    
-    assert len(train_data)==len(adv_data), 'different length'
+
+    assert len(adv_data[0])==parameters['per_adv'], 'different number of adv_examples'
+    assert len(train_data)==len(adv_data), 'different data length'
     
     if parameters['per_adv']==1:
         train_batched=generate_batch_data(train_data, parameters['batch_size'])

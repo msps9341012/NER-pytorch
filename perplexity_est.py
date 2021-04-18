@@ -19,8 +19,8 @@ class Perplexity_estimator:
     def __init__(self):
         with torch.no_grad():
             self.scoring_model = GPT2LMHeadModel.from_pretrained('gpt2')
-            self.scoring_model.cuda()
             self.scoring_model.eval()
+            self.scoring_model.cuda()
             self.scoring_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         
     

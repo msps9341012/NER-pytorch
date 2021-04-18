@@ -77,6 +77,14 @@ update_tag_scheme(test_train_sentences, tag_scheme)
 dico_words_train = word_mapping(train_sentences, lower)[0]
 
 
+append_yago = parameters['append_yago']
+
+if append_yago:
+    with open("../YagoReplacement/yago_train_wb.pkl", 'rb') as f:
+        yago_train_wb = pickle.load(f)
+    dico_words_train , _, _ = word_mapping(yago_train_wb, lower)
+
+
 dico_words, word_to_id, id_to_word = augment_with_pretrained(
         dico_words_train.copy(),
         parameters['pre_emb'],
@@ -84,7 +92,6 @@ dico_words, word_to_id, id_to_word = augment_with_pretrained(
             [[w[0] for w in s] for s in dev_sentences + test_sentences])
         ) if not parameters['all_emb'] else None
     )
-
 
 
 dico_chars, char_to_id, id_to_char = char_mapping(train_sentences)

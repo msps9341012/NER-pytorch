@@ -181,6 +181,7 @@ def augment_with_pretrained(dictionary, ext_emb_path, words):
     to the dictionary, otherwise, we only add the words that are given by
     `words` (typically the words in the development and test sets.)
     """
+    
     print('Loading pretrained embeddings from %s...' % ext_emb_path)
     assert os.path.isfile(ext_emb_path)
 
@@ -190,7 +191,7 @@ def augment_with_pretrained(dictionary, ext_emb_path, words):
         for line in codecs.open(ext_emb_path, 'r', 'utf-8')
         if len(ext_emb_path) > 0
     ])
-
+    
     # We either add every word in the pretrained file,
     # or only words given in the `words` list to which
     # we can assign a pretrained embedding
@@ -206,7 +207,7 @@ def augment_with_pretrained(dictionary, ext_emb_path, words):
                 re.sub('\d', '0', word.lower())
             ]) and word not in dictionary:
                 dictionary[word] = 0
-
+    
     word_to_id, id_to_word = create_mapping(dictionary)
     return dictionary, word_to_id, id_to_word
 

@@ -143,8 +143,10 @@ class Embedding_Processor:
             
         
     
-    
-         
+def loading_yago(path):
+    with open(path, 'rb') as handle:
+        yago_data = pickle.load(handle)
+    return yago_data
         
 
     
@@ -177,7 +179,8 @@ def main():
     update_tag_scheme(dev_sentences, tag_scheme)
     update_tag_scheme(test_sentences, tag_scheme)
     
-    dataset_map={'train':train_sentences, 'dev':dev_sentences, 'test':test_sentences}
+    dataset_map={'train':train_sentences, 'dev':dev_sentences, 'test':test_sentences, 
+                 'train_yago':loading_yago('yago_train_wb.pkl') , 'dev_yago':''}
     
     print('Get bert embedding for {} using {}'.format(dataset,pooling_method))
     for i in tqdm(dataset_map[dataset]):

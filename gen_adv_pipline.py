@@ -35,7 +35,8 @@ def add_args(parser):
 
     parser.add_option("--bert_pooler", default="mean",help="which bert pooling method")
     parser.add_option("--filter", action='store_true',help="apply perplexity filter or not")
-    #To-do: add random and normal sampling
+    parser.add_option("--cascade", action='store_true',help="using the first example from the last step to generate")
+    #To-do: add normal sampling
     parser.add_option("--rep_with", default="farthest",help="replace with closest|farthest embedding ")
     
     
@@ -260,6 +261,7 @@ def main():
     pipeline_order = opts.order.split(',')
 
     append_yago = opts.append_yago
+    
     if opts.preprocess_set:
         preprocess_set = opts.preprocess_set.split(',')
         preprocess_set = list(map(lambda x: x.strip(), preprocess_set))
@@ -315,7 +317,8 @@ def main():
 
                 updated_data = using_ppdb(data_to_ppdb, global_gen_number, filter_ppdb_list)
                 assert len(updated_data)==len(data_to_ppdb), 'error'
-                
+                if opts.filter:
+                      updated_data = filter_examples(dataset_map[opts.dataset],updated_data, number_to_generate)
                 savefile(updated_data, opts, agg_name)
             print('ppdb finished')
         
@@ -352,15 +355,13 @@ def main():
                     print('used {}'.format(opts.dataset))
                     data_to_rep = dataset_map[opts.dataset]
                 
-                import pdb
-                pdb.set_trace()
                 if opts.bert:
    
 
                     path_map = {'train':'../tag_embed/train_bert_{}'.format(opts.bert_pooler), 
                                 'dev':'../tag_embed/dev_bert_{}'.format(opts.bert_pooler),
-                                'dev_yago':'../tag_embed/dev_yago_bert',
-                                'train_yago':'../tag_embed/train_yago_bert'}
+                                'dev_yago':'../tag_embed/dev_yago_bert_{}'.format(opts.bert_pooler),
+                                'train_yago':'../tag_embed/train_yago_bert_{}'.format(opts.bert_pooler)}
                     
                     if append_yago:
                         word_bank_key = opts.wordbank + "_yago"
@@ -378,12 +379,13 @@ def main():
                 
                 if opts.filter:
                     updated_data = filter_examples(dataset_map[opts.dataset],updated_data, number_to_generate)
-                    global_gen_number = number_to_generate #reset the value for the following process
                 
                 savefile(updated_data, opts, agg_name)
 
             print('rep finished')
-        
+                      
+        if not opts.cascade:
+            global_gen_number = number_to_generate
         
 
 

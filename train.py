@@ -36,13 +36,13 @@ t = time.time()
 opts, parameters=get_args()
 
 experiment=None
-'''
+
 experiment = Experiment(api_key='Bq7FWdV8LPx8HkWh67e5UmUPm',
                        project_name='NER',
                        auto_param_logging=False, auto_metric_logging=False)
 
 experiment.log_parameters(parameters)
-'''
+
 
 models_path = "models/"
 use_gpu = parameters['use_gpu']
@@ -352,8 +352,9 @@ if parameters['non_gradient'] or parameters['dynamic_inference']:
         
         adv_batched = list(divide_chunks(adv_examples, parameters['batch_size']))
         indexed_data_batched = list(divide_chunks(indexed_data_all, parameters['batch_size']))
-    
+         
         assert len(adv_batched)==len(train_have_adv), 'different batch length'
+        
     
     from weight_scheduler import WarmupWeight
     #since rep_token_map may contain empty example, use rep_batch to approximate
@@ -516,14 +517,14 @@ for epoch in range(parameters['epochs']):
     print('Epoch %d : train/dev/test : %.2f / %.2f / %.2f - %d'%(epoch, new_train_F, new_dev_F, new_test_F, best_idx))
     model.train(True)
     adjust_learning_rate(optimizer, lr=learning_rate/(1+0.05*sample_count/len(train_data)))
-    '''
+    
     metrics['new_train_F']=new_train_F
     metrics['new_test_F']=new_test_F
     metrics['new_dev_F']=new_dev_F
     
     experiment.log_metrics(metrics)
     experiment.set_step(epoch+1)
-    '''
+    
     
 
 

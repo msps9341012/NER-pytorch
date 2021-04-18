@@ -12,6 +12,7 @@ import pickle
 import copy
 import faiss
 
+
 import torch
 
 
@@ -188,6 +189,13 @@ class Word_Replacement():
         base_embedding, _ = self.calculate_net_embedding_vector_for_chunk(chunk_to_replace,  pool_method)
         base_embedding = base_embedding.astype('float32')
         base_embedding = base_embedding / np.linalg.norm(base_embedding)
+
+
+        if replacement_method=='random':
+            num_poss_rep = len(self.tokens_index_map[tag_type])
+            for i in range(max_replacements):
+                top_replacements.append(self.tokens_index_map[tag_type][random.randint(0, num_poss_rep-1)])
+            return top_replacements
         
         if replacement_method=='farthest':
             base_embedding = base_embedding*-1

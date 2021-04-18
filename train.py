@@ -77,6 +77,12 @@ update_tag_scheme(test_train_sentences, tag_scheme)
 dico_words_train = word_mapping(train_sentences, lower)[0]
 
 
+if parameters['append_yago']:
+    with open('yago_train_wb.pkl', 'rb') as handle:
+        yago_data = pickle.load(handle)
+        dico_words_train = word_mapping(yago_data, lower)[0]
+
+
 dico_words, word_to_id, id_to_word = augment_with_pretrained(
         dico_words_train.copy(),
         parameters['pre_emb'],
@@ -84,6 +90,7 @@ dico_words, word_to_id, id_to_word = augment_with_pretrained(
             [[w[0] for w in s] for s in dev_sentences + test_sentences])
         ) if not parameters['all_emb'] else None
     )
+
 
 
 
@@ -307,7 +314,7 @@ if parameters['non_gradient'] or parameters['dynamic_inference']:
             
     with open(parameters['adv_path'], 'rb') as handle:
         adv_data = pickle.load(handle)
-
+    
     assert len(adv_data[0])==parameters['per_adv'], 'different number of adv_examples'
     assert len(train_data)==len(adv_data), 'different data length'
     
@@ -339,7 +346,6 @@ if parameters['non_gradient'] or parameters['dynamic_inference']:
                     train_have_adv.append(train_data[index])
                 
                 pbar.update(1)
-        
         train_have_adv = generate_batch_data(train_have_adv,parameters['batch_size'])
         
         train_left = generate_batch_data(train_left,parameters['batch_size'])
@@ -434,7 +440,6 @@ for epoch in range(parameters['epochs']):
         
         if parameters['non_gradient']:
             if index < len(adv_batched) and epoch >= parameters['launch_epoch']:
-                
                 ratio=ratio_scheduler.step()
                 
                 adv_batch_input = adv_batched[index]

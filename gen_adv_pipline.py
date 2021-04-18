@@ -31,6 +31,8 @@ def add_args(parser):
     parser.add_option("--name", default="",help="filename for saving")
     parser.add_option("--save_dir", default="",help="directory for storing the generated data")
     parser.add_option("--bert", action='store_true',help="using bert embedding")
+    parser.add_option("--append_yago", action='store_true',help="append yago words in replacements")
+
     parser.add_option("--bert_pooler", default="mean",help="which bert pooling method")
     parser.add_option("--filter", action='store_true',help="apply perplexity filter or not")
     #To-do: add random and normal sampling
@@ -104,19 +106,25 @@ def load_data(pre_emb):
     
     return train_sentences_packed, dev_sentences_packed, test_sentences_packed, word_embeds, word_to_id, filter_ppdb_list
 
-def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank, rep_method):
+def using_word_rep(dataset, n, word_to_id, word_embeds, word_bank, rep_method, append_yago = False):
     '''
     If the data has already been processed via different method, then modify on them.
     Or, generate n adv examples using this method.
     '''
-    
+
+
+    if append_yago and not isinstance(word_bank, str):
+        with open('../YagoReplacement/yago_wb.pkl', 'rb') as handle:
+            word_bank_yago = pickle.load(handle)
+        word_bank.extend(word_bank_yago)
+
     wr = Word_Replacement(lower, word_to_id, word_embeds, word_bank)
     
 #     word_bank=unpacked_data(word_bank)
 #     for sentence in word_bank:
 #         wr.create_tag_chunks(sentence)
 
-    print("Generating Closest Adversarial Examples")
+    print("Generating {} Adversarial Examples".format(rep_method))
     all_adversarial_examples_farthest = []
 
     print("Dataset Len : {}".format(len(dataset)))
@@ -250,6 +258,8 @@ def main():
     
     method_to_path={}
     pipeline_order = opts.order.split(',')
+
+    append_yago = opts.append_yago
     if opts.preprocess_set:
         preprocess_set = opts.preprocess_set.split(',')
         preprocess_set = list(map(lambda x: x.strip(), preprocess_set))
@@ -277,6 +287,7 @@ def main():
     '''  
     train_sentences, dev_sentences, test_sentences, word_embeds, word_to_id, filter_ppdb_list = load_data(opts.pre_emb)
     print('Finish loading data')
+
     
     dataset_map={'train':train_sentences, 'dev':dev_sentences, 'test':test_sentences}
     
@@ -341,18 +352,27 @@ def main():
                     print('used {}'.format(opts.dataset))
                     data_to_rep = dataset_map[opts.dataset]
                 
+                import pdb
+                pdb.set_trace()
                 if opts.bert:
+   
+
                     path_map = {'train':'../tag_embed/train_bert_{}'.format(opts.bert_pooler), 
-                                'dev':'../tag_embed/dev_bert_{}'.format(opts.bert_pooler)}
+                                'dev':'../tag_embed/dev_bert_{}'.format(opts.bert_pooler),
+                                'dev_yago':'../tag_embed/dev_yago_bert',
+                                'train_yago':'../tag_embed/train_yago_bert'}
                     
-                    word_bank_path = path_map[opts.wordbank]
+                    if append_yago:
+                        word_bank_key = opts.wordbank + "_yago"
+                    
+                    word_bank_path = path_map[word_bank_key]
                     
                     updated_data = using_word_rep(data_to_rep, global_gen_number,  
-                                                  word_to_id, 'bert', word_bank_path, opts.rep_with)
+                                                  word_to_id, 'bert', word_bank_path, opts.rep_with, opts.append_yago)
                 else:
                     word_bank = unpacked_data(dataset_map[opts.wordbank])
                     updated_data = using_word_rep(data_to_rep, global_gen_number,  
-                                                  word_to_id, word_embeds, word_bank, opts.rep_with)
+                                                  word_to_id, word_embeds, word_bank, opts.rep_with, opts.append_yago)
                     
                 assert len(updated_data)==len(data_to_rep), 'error'
                 

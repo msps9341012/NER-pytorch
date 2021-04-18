@@ -8,11 +8,12 @@ def add_data_args(parser):
     parser.add_option("-d", "--dev", default="dataset/eng.testa", help="Dev set location")
     parser.add_option("-t", "--test", default="dataset/eng.testb", help="Test set location")
     parser.add_option('--test_train', default='dataset/eng.train54019', help='test train')
-    
+    parser.add_option("--append_yago", action='store_true',help="append yago words in dictionary")
+
     parser.add_option("-s", "--tag_scheme", default="iobes",help="Tagging scheme (IOB or IOBES)")
     parser.add_option("-l", "--lower", default="1",type='int', help="Lowercase words (this will not affect character inputs)")
     parser.add_option("-z", "--zeros", default="0",type='int', help="Replace digits with 0")
-    
+
     return parser
 
 def add_load_args(parser):
@@ -134,7 +135,7 @@ def get_args():
     parameters['batch_size']=opts.batch_size
     parameters['early_stop']=opts.early_stop
 
-    
+    parameters['append_yago'] = opts.append_yago
     
     parameters['use_gpu'] = opts.use_gpu == 1 and torch.cuda.is_available()
     

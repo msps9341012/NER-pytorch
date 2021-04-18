@@ -93,7 +93,6 @@ dico_words, word_to_id, id_to_word = augment_with_pretrained(
 
 
 
-
 dico_chars, char_to_id, id_to_char = char_mapping(train_sentences)
 dico_tags, tag_to_id, id_to_tag = tag_mapping(train_sentences)
 

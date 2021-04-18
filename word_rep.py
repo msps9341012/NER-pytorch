@@ -196,6 +196,7 @@ class Word_Replacement():
             for i in range(max_replacements):
                 top_replacements.append(self.tokens_index_map[tag_type][random.randint(0, num_poss_rep-1)])
             return top_replacements
+
         
         if replacement_method=='farthest':
             base_embedding = base_embedding*-1

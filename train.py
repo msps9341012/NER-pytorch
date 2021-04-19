@@ -36,13 +36,13 @@ t = time.time()
 opts, parameters=get_args()
 
 experiment=None
-'''
+
 experiment = Experiment(api_key='Bq7FWdV8LPx8HkWh67e5UmUPm',
                        project_name='NER',
                        auto_param_logging=False, auto_metric_logging=False)
 
 experiment.log_parameters(parameters)
-'''
+
 
 models_path = "models/"
 use_gpu = parameters['use_gpu']

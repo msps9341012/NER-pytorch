@@ -36,13 +36,13 @@ t = time.time()
 opts, parameters=get_args()
 
 experiment=None
-
+'''
 experiment = Experiment(api_key='Bq7FWdV8LPx8HkWh67e5UmUPm',
                        project_name='NER',
                        auto_param_logging=False, auto_metric_logging=False)
 
 experiment.log_parameters(parameters)
-
+'''
 
 models_path = "models/"
 use_gpu = parameters['use_gpu']
@@ -78,9 +78,13 @@ dico_words_train = word_mapping(train_sentences, lower)[0]
 
 
 if parameters['append_yago']:
-    with open('yago_train_wb.pkl', 'rb') as handle:
-        yago_data = pickle.load(handle)
-        dico_words_train = word_mapping(yago_data, lower)[0]
+
+    with open(parameters['adv_path'], 'rb') as handle:
+        adv_yago_data = pickle.load(handle)
+        flat_adv = [sen for adv_examples in adv_yago_data for sen in adv_examples]
+        flat_adv.extend(train_sentences)
+        dico_words_train = word_mapping(flat_adv, lower)[0]
+
 
 
 dico_words, word_to_id, id_to_word = augment_with_pretrained(

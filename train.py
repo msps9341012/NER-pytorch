@@ -33,15 +33,17 @@ from pytorchtools import EarlyStopping
 
 t = time.time()
 
-opts, parameters=get_args()
+opts, parameters = get_args()
 
-experiment=None
+experiment = None
 
 experiment = Experiment(api_key='Bq7FWdV8LPx8HkWh67e5UmUPm',
                        project_name='NER',
                        auto_param_logging=False, auto_metric_logging=False)
 
 experiment.log_parameters(parameters)
+experiment.set_name(opts.exp_name)
+
 
 
 models_path = "models/"

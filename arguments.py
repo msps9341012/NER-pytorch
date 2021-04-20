@@ -68,8 +68,8 @@ def add_non_adv_args(parser):
     parser.add_option("--per_adv", default='1',type='int', help='number of generated adv examples for one training sample ')
     parser.add_option("--adv_path", default="",help="Path to adv examples")
     parser.add_option("--dynamic_inference", action='store_true' ,help="inference adv example before feed to the model ")
-    
-    
+    parser.add_option("--exp_name", default="Latest_Exp",help="Name of the experiment for comet tracking")
+
     return parser
 
 
@@ -136,7 +136,8 @@ def get_args():
     parameters['early_stop']=opts.early_stop
 
     parameters['append_yago'] = opts.append_yago
-    
+    parameters['exp_name'] = opts.exp_name
+
     parameters['use_gpu'] = opts.use_gpu == 1 and torch.cuda.is_available()
     
     check_args(opts,parameters)

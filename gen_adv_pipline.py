@@ -38,8 +38,7 @@ def add_args(parser):
     parser.add_option("--cascade", action='store_true',help="using the first example from the last step to generate")
     #To-do: add normal sampling
     parser.add_option("--rep_with", default="farthest",help="replace with closest|farthest embedding ")
-    
-    
+    parser.add_option("--yago_short", action='store_true', help="consider short word bank of yago")
     return parser
 
 
@@ -260,7 +259,6 @@ def main():
     method_to_path={}
     pipeline_order = opts.order.split(',')
 
-    append_yago = opts.append_yago
     
     if opts.preprocess_set:
         preprocess_set = opts.preprocess_set.split(',')
@@ -361,10 +359,19 @@ def main():
                     path_map = {'train':'../tag_embed/train_bert_{}'.format(opts.bert_pooler), 
                                 'dev':'../tag_embed/dev_bert_{}'.format(opts.bert_pooler),
                                 'dev_yago':'../tag_embed/dev_yago_bert_{}'.format(opts.bert_pooler),
-                                'train_yago':'../tag_embed/train_yago_bert_{}'.format(opts.bert_pooler)}
+                                'train_yago':'../tag_embed/train_yago_short_bert_{}'.format(opts.bert_pooler),
+                                'train_yago_short':'../tag_embed/train_yago_short_bert_{}'.format(opts.bert_pooler)
+
+                                }
                     
-                    if append_yago:
-                        word_bank_key = opts.wordbank + "_yago"
+                    word_bank_key = opts.wordbank
+
+                    if opts.append_yago:
+                        word_bank_key = word_bank_key + "_yago"
+
+                        if opts.yago_short:
+                            word_bank_key = word_bank_key + "_short"
+                            print("Considering shorter version of Yago.\n")
                     
                     word_bank_path = path_map[word_bank_key]
                     

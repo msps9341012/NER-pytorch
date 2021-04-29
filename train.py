@@ -1,5 +1,6 @@
 # coding=utf-8
 from __future__ import print_function
+from comet_ml import Experiment
 #import optparse
 import itertools
 #from collections import OrderedDict
@@ -18,12 +19,24 @@ import pickle
 from utils import *
 from loader import *
 from model import BiLSTM_CRF
-from arguments import get_args 
+from arguments import get_args
+from test_examples import extra_example
 
 
 t = time.time()
 
+
+
 opts, parameters=get_args()
+
+#experiment=None
+
+# experiment = Experiment(api_key='Bq7FWdV8LPx8HkWh67e5UmUPm',
+#                        project_name='NER',
+#                        auto_param_logging=False, auto_metric_logging=False)
+#
+# experiment.log_parameters(parameters)
+
 models_path = "models/"
 use_gpu = parameters['use_gpu']
 
@@ -89,6 +102,8 @@ test_data = prepare_dataset(
 test_train_data = prepare_dataset(
     test_train_sentences, word_to_id, char_to_id, tag_to_id, lower
 )
+
+#extra_example = prepare_dataset([extra_example],word_to_id,char_to_id,tag_to_id, lower)
 
 print("%i / %i / %i sentences in train / dev / test." % (
     len(train_data), len(dev_data), len(test_data)))
@@ -233,6 +248,8 @@ def evaluating(model, datas, best_F,display_confusion_matrix = False):
             ))
     return best_F, new_F, save
 
+
+
 def extract_grad_hook(module, grad_in, grad_out):
     if module.weight.shape[0]==len(char_to_id): #char_level
         extracted_grads_char.append(grad_out[0])
@@ -301,7 +318,7 @@ def gen_input(input_data):
             chars2_mask[i, :chars2_length[i]] = c
         chars2_mask = Variable(torch.LongTensor(chars2_mask))
     
-    return  sentence_in, targets, chars2_mask, caps, chars2_length, matching_char
+    return sentence_in, targets, chars2_mask, caps, chars2_length, matching_char
 
 
 model.train(True)
@@ -309,18 +326,26 @@ ratio=0.0
 if parameters['adv']:
     ratio=0.5
 
-if parameters['paraphrase']:
-    #paraphraser=Paraphraser('english-ewt-ud-2.5-191206.udpipe')
-    with open('../para_text/para_token_agg', 'rb') as handle:
-        para_token_map = pickle.load(handle)
-    
-    from weight_scheduler import WarmupWeight
-    num_iters=parameters['epochs']*len(para_token_map.keys())
-    warmup_iter=parameters['warmup']*num_iters
-    
-    ratio_scheduler=WarmupWeight(start_lr=0.5, warmup_iter=warmup_iter, num_iters=num_iters,
-                              warmup_style=parameters['warmup_style'], last_iter=-1, alpha=parameters['exp_weight'])
-    
+
+def roboust_test(model,data):
+    sentence_in, targets, chars2_mask, caps, chars2_length, matching_char = gen_input(data[0])
+    if use_gpu:
+        sentence_in = sentence_in.cuda()
+        targets = targets.cuda()
+        chars2_mask = chars2_mask.cuda()
+        caps = caps.cuda()
+
+    log_loss = model.neg_log_likelihood(sentence=sentence_in, tags = targets, caps=caps, chars2=chars2_mask,
+                                        chars2_length=chars2_length, matching_char=matching_char)
+
+    prob = torch.exp(-log_loss).cpu().detach().numpy()
+
+    return prob
+
+
+
+metrics={}
+
 
 for epoch in range(parameters['epochs']):
     in_epoch_losses = []
@@ -347,36 +372,10 @@ for epoch in range(parameters['epochs']):
                                                       caps = caps, 
                                                       chars2_length = chars2_length, 
                                                       matching_char = matching_char)
-        
-        neg_log_likelihood_para=0
-        if parameters['paraphrase']:
-            if index in para_token_map:
-                
-                ratio=ratio_scheduler.step()
-                
-                res = para_token_map[index]
-                random_paraphrase = res[random.randint(0,len(res)-1)]
-                
-                sentence_in_para, targets_para, chars2_mask_para, caps_para, chars2_length_para, matching_char_para = gen_input(random_paraphrase)
-                
-                if use_gpu:
-                    sentence_in_para = sentence_in_para.cuda()
-                    targets_para     = targets_para.cuda()
-                    chars2_mask_para = chars2_mask_para.cuda()
-                    caps_para        = caps_para.cuda()
-                
-                neg_log_likelihood_para = model.neg_log_likelihood(sentence = sentence_in_para, 
-                                                                  tags = targets_para, 
-                                                                  chars2 = chars2_mask_para, 
-                                                                  caps = caps_para, 
-                                                                  chars2_length = chars2_length_para, 
-                                                                  matching_char = matching_char_para)
-                
-            else:
-                ratio = 0.0
+
                 
         loss = float(neg_log_likelihood.cpu().detach().numpy()) / len(data['words'])
-        neg_log_likelihood = neg_log_likelihood*(1-ratio)+ neg_log_likelihood_para*ratio
+        neg_log_likelihood = neg_log_likelihood*(1-ratio)
         neg_log_likelihood.backward()
 
 
@@ -449,26 +448,19 @@ for epoch in range(parameters['epochs']):
         best_idx = epoch
         torch.save(model.state_dict(), model_name)
     best_test_F, new_test_F, _ = evaluating(model, test_data, best_test_F)
-
+    #target_prob = roboust_test(model, extra_example)
+    #print(target_prob)
     all_F.append([0.0, new_dev_F, new_test_F])
 
     sys.stdout.flush()
 
-    print('Epoch %d : valid/test/test_best : %.2f / %.2f / %.2f - %d'%(epoch, best_dev_F, new_test_F,best_test_F, best_idx))
+    print('Epoch %d : valid/test/: %.2f / %.2f- %d'%(epoch, new_dev_F, new_test_F, best_idx))
     model.train(True)
     adjust_learning_rate(optimizer, lr=learning_rate/(1+0.05*count/len(train_data)))
+    #
+    # metrics['target_prob'] = target_prob
+    #
+    # experiment.log_metrics(metrics)
+    # experiment.set_epoch(epoch+1)
 
 
-
-print(time.time() - t)
-
-#plt.plot(losses)
-#plt.show()
-'''
-max_temp=max_idx=0
-for i in range(len(all_F)):
-    if all_F[i][2] > max_temp:
-        max_temp = all_F[i][2]
-        max_idx = i
-print(max_idx, max_temp)
-'''

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SshConfigs">
+    <configs>
+      <sshConfig authType="PASSWORD" host="gypsum.cs.umass.edu" id="1797091e-cd18-4ab6-9637-87129c9a3f2e" port="22" nameFormat="DESCRIPTIVE" username="rueiyaosun" />
+    </configs>
+  </component>
+</project>

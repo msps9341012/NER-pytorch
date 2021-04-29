@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="04d80cec-3d90-4226-8435-4c9d326c7431" name="gypsum">
+        <fileTransfer rootFolder="/home/rueiyaosun" accessType="SFTP" host="gypsum.cs.umass.edu" port="22" sshConfigId="1797091e-cd18-4ab6-9637-87129c9a3f2e" sshConfig="rueiyaosun@gypsum.cs.umass.edu:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

@@ -219,6 +219,7 @@ class BiLSTM_CRF(nn.Module):
             max_tag_var, _ = torch.max(tag_var, dim=1)
             tag_var = tag_var - max_tag_var.view(-1, 1)
             forward_var = max_tag_var + torch.log(torch.sum(torch.exp(tag_var), dim=1)).view(1, -1) # ).view(1, -1)
+
         terminal_var = (forward_var + self.transitions[self.tag_to_ix[STOP_TAG]]).view(1, -1)
         alpha = log_sum_exp(terminal_var)
         # Z(x)
@@ -243,7 +244,6 @@ class BiLSTM_CRF(nn.Module):
                 viterbivars_t = viterbivars_t.cuda()
             forward_var = viterbivars_t + feat
             backpointers.append(bptrs_t)
-
         terminal_var = forward_var + self.transitions[self.tag_to_ix[STOP_TAG]]
         terminal_var.data[self.tag_to_ix[STOP_TAG]] = -10000.
         terminal_var.data[self.tag_to_ix[START_TAG]] = -10000.
